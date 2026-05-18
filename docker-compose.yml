@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fodun_sqlserver
+    
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "FodunDev@2024"
+      MSSQL_PID: "Developer"
+      MSSQL_COLLATION: "SQL_Latin1_General_CP1_CI_AS"
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    
+    ports:
+      - "1433:1433"
+    
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./scripts:/scripts
+    
+    networks:
+      - fodun-network
+    
+    healthcheck:
+      test: [
+        "CMD",
+        "/opt/mssql-tools18/bin/sqlcmd",
+        "-S", "localhost",
+        "-U", "sa",
+        "-P", "FodunDev@2024",
+        "-Q", "SELECT 1"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DOCKER_DATA_PATH:-.docker/sqlserver_data}"
+
+networks:
+  fodun-network:
+    driver: bridge

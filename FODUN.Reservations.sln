@@ -1,0 +1,62 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34330.188
+MinimumVisualStudioVersion = 10.0.40219.1
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Domain", "src\Domain\FODUN.Reservations.Domain.csproj", "{00000001-0001-0001-0001-000000000001}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Application", "src\Application\FODUN.Reservations.Application.csproj", "{00000002-0002-0002-0002-000000000002}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Infrastructure", "src\Infrastructure\FODUN.Reservations.Infrastructure.csproj", "{00000003-0003-0003-0003-000000000003}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Api", "src\Api\FODUN.Reservations.Api.csproj", "{00000004-0004-0004-0004-000000000004}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Tests.Unit", "tests\Unit\FODUN.Reservations.Tests.Unit.csproj", "{00000005-0005-0005-0005-000000000005}"
+EndProject
+
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7B78}") = "FODUN.Reservations.Tests.Integration", "tests\Integration\FODUN.Reservations.Tests.Integration.csproj", "{00000006-0006-0006-0006-000000000006}"
+EndProject
+
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{00000001-0001-0001-0001-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000001-0001-0001-0001-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000001-0001-0001-0001-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000001-0001-0001-0001-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+
+		{00000002-0002-0002-0002-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000002-0002-0002-0002-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000002-0002-0002-0002-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000002-0002-0002-0002-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+
+		{00000003-0003-0003-0003-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000003-0003-0003-0003-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000003-0003-0003-0003-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000003-0003-0003-0003-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+
+		{00000004-0004-0004-0004-000000000004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000004-0004-0004-0004-000000000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000004-0004-0004-0004-000000000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000004-0004-0004-0004-000000000004}.Release|Any CPU.Build.0 = Release|Any CPU
+
+		{00000005-0005-0005-0005-000000000005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000005-0005-0005-0005-000000000005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000005-0005-0005-0005-000000000005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000005-0005-0005-0005-000000000005}.Release|Any CPU.Build.0 = Release|Any CPU
+
+		{00000006-0006-0006-0006-000000000006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00000006-0006-0006-0006-000000000006}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00000006-0006-0006-0006-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00000006-0006-0006-0006-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+
+EndGlobal
