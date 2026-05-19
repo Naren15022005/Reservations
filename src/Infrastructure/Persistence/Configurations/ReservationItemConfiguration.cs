@@ -1,16 +1,21 @@
-namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
-
+using FODUN.Reservations.Domain.Aggregates.Reservation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Domain.Entities;
 
-public class ReservationItemConfiguration : IEntityTypeConfiguration<ReservationItem>
+namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
+
+public sealed class ReservationItemConfiguration : IEntityTypeConfiguration<ReservationItem>
 {
     public void Configure(EntityTypeBuilder<ReservationItem> builder)
     {
-        builder.HasKey(x => x.Id);
-        
-        builder.Property(x => x.PricePerNight).HasPrecision(18, 2);
-        builder.Property(x => x.Subtotal).HasPrecision(18, 2);
+        builder.ToTable("ReservationItems");
+        builder.HasKey(ri => ri.Id);
+        builder.Property(ri => ri.Id).HasDefaultValueSql("NEWID()");
+        builder.Property(ri => ri.PricePerNight).HasColumnType("decimal(18,2)").IsRequired();
+
+        builder.Ignore(ri => ri.Subtotal);
+
+        builder.HasIndex(ri => ri.SeatId)
+            .HasDatabaseName("IX_ReservationItems_SeatId");
     }
 }

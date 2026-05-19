@@ -46,3 +46,26 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# User secrets
+secrets.json
+
+# Credenciales locales — usar appsettings.example.json como plantilla
+appsettings.Development.json
+appsettings.Production.json
+
+# Bases de datos locales SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Carpeta de documentación interna / generada por herramientas
+Readmes/
+ANALISIS_COMPLETO.md
+
+# Scripts temporales de desarrollo
+scripts/sql/03_StoredProcedures_Dev.sql
+
+# Archivos generados en runtime (comprobantes subidos y tickets PDF/HTML)
+src/Api/wwwroot/uploads/
+src/Api/wwwroot/tickets/

@@ -1,0 +1,407 @@
+@page
+@model FODUN.Reservations.Api.Pages.Dashboard.IndexModel
+@using System.Globalization
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnv
+@{
+    ViewData["Title"] = "Mis Reservas";
+    var cop = new CultureInfo("es-CO");
+}
+
+<h2 class="fodun-section-title">Mis Reservas</h2>
+
+@if (TempData["Success"] is string successMsg)
+{
+    <div class="fodun-alert fodun-alert-success" style="margin-bottom:16px">@successMsg</div>
+}
+@if (TempData["Error"] is string errorMsg)
+{
+    <div class="fodun-alert fodun-alert-error" style="margin-bottom:16px">@errorMsg</div>
+}
+
+<div class="mis-reservas-box">
+    <div class="mis-reservas-box-header">Mis Reservas</div>
+
+    <div style="padding:0">
+        @if (!Model.Reservations.Any())
+        {
+            <div style="padding:24px;text-align:center;font-size:12px;color:#777">
+                No tienes reservas registradas.
+                <a asp-page="/Accommodations/Index" class="btn-fodun" style="margin-left:12px">Ver sedes disponibles</a>
+            </div>
+        }
+        else
+        {
+            <table class="fodun-table">
+                <thead>
+                    <tr>
+                        <th style="width:36px">Ampliar</th>
+                        <th>Lugar</th>
+                        <th style="width:100px">Fecha Reserva</th>
+                        <th style="width:100px">Fecha Llegada</th>
+                        <th style="width:100px">Fecha Salida</th>
+                        <th style="width:80px">No. Personas</th>
+                        <th style="width:100px">No. Habitaciones</th>
+                        <th style="width:90px">Valor Total</th>
+                        <th style="width:110px">Estado</th>
+                        <th style="width:120px">Comprobante de Pago</th>
+                        <th style="width:90px">Ticket</th>
+                        <th style="width:70px">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.Reservations)
+                    {
+                        var paymentLabel = GetPaymentLabel(r.Status, r.HasPaymentReceipt);
+                        var paymentCss   = GetPaymentCss(r.Status, r.HasPaymentReceipt);
+                        <tr>
+                            <td>
+                                <button type="button" class="icon-detail-btn"
+                                        onclick="openModal(this)"
+                                        data-checkin="@r.CheckInDate.ToString("dd/MM/yyyy")"
+                                        data-checkout="@r.CheckOutDate.ToString("dd/MM/yyyy")"
+                                        data-persons="@r.TotalPersons"
+                                        data-rooms="@r.NumberOfRoomsNeeded"
+                                        data-total="@r.TotalCost.ToString("C0", cop)"
+                                        data-laundry="@(r.LaundryService ? r.LaundryServiceCost.ToString("C0", cop) : "$0")"
+                                        data-status="@paymentLabel"
+                                        data-place="@r.PlaceName"
+                                        data-notes="@(r.Notes ?? "—")"
+                                        title="Ver detalles">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="#888" viewBox="0 0 16 16">
+                                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                            <td class="td-left">@r.PlaceName</td>
+                            <td>@r.CreatedAt.ToString("dd-MM-yyyy")</td>
+                            <td>@r.CheckInDate.ToString("dd-MM-yyyy")</td>
+                            <td>@r.CheckOutDate.ToString("dd-MM-yyyy")</td>
+                            <td>@r.TotalPersons</td>
+                            <td>@r.NumberOfRoomsNeeded</td>
+                            <td><strong>@r.TotalCost.ToString("C0", cop)</strong></td>
+                            <td>
+                                <span class="status-badge @paymentCss">@paymentLabel</span>
+                            </td>
+                            <td style="text-align:center">
+                                @if (r.Status == "Cancelled")
+                                {
+                                    <span style="color:#AAA;font-size:11px">—</span>
+                                }
+                                else if (r.HasPaymentReceipt)
+                                {
+                                    <span title="Comprobante enviado" style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600">
+                                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                                        </svg>
+                                        Enviado
+                                    </span>
+                                }
+                                else
+                                {
+                                    <a asp-page="/Reservations/Pay" asp-route-id="@r.Id"
+                                       class="btn-receipt-send">
+                                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                                        </svg>
+                                        Enviar
+                                    </a>
+                                }
+                            </td>
+                            <td style="text-align:center">
+                                @{
+                                    var pdfFile  = System.IO.Path.Combine(HostEnv.WebRootPath, "tickets", $"{r.Id:N}.pdf");
+                                    var htmlFile = System.IO.Path.Combine(HostEnv.WebRootPath, "tickets", $"{r.Id:N}.html");
+                                    bool hasTicket   = System.IO.File.Exists(pdfFile) || System.IO.File.Exists(htmlFile);
+                                    var viewUrl      = System.IO.File.Exists(htmlFile) ? $"/tickets/{r.Id:N}.html" : $"/tickets/{r.Id:N}.pdf";
+                                    var downloadUrl  = System.IO.File.Exists(pdfFile)  ? $"/tickets/{r.Id:N}.pdf"  : viewUrl;
+                                }
+                                @if (hasTicket)
+                                {
+                                    <button type="button" class="btn-ticket-eye"
+                                            onclick="openTicket('@viewUrl', '@downloadUrl', '@r.Id.ToString("N")[..8].ToUpper()')"
+                                            title="Ver ticket">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                            <circle cx="12" cy="12" r="3"/>
+                                        </svg>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span style="color:#AAA;font-size:11px">—</span>
+                                }
+                            </td>
+                            <td style="white-space:nowrap">
+                                @if (r.Status is "Pending" or "Confirmed")
+                                {
+                                    <a asp-page="/Dashboard/Cancel" asp-route-id="@r.Id"
+                                       class="btn-fodun btn-fodun-sm btn-fodun-outline">
+                                        Cancelar
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span style="color:#AAA;font-size:11px">—</span>
+                                }
+                            </td>
+
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<div style="margin-top:14px;text-align:right">
+    <a asp-page="/Accommodations/Index" class="btn-fodun">+ Nueva Reserva</a>
+</div>
+
+<!-- MODAL: Ticket -->
+<div class="modal fade" id="modalTicket" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content" style="border-radius:12px;overflow:hidden;border:none;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+
+            <!-- Header crimson -->
+            <div style="background:#8B1A1A;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                    <svg width="20" height="20" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="flex-shrink:0">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <div style="min-width:0">
+                        <div style="color:rgba(255,255,255,.65);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600">Ticket de reserva</div>
+                        <div id="ticket-ref" style="color:#fff;font-weight:700;font-size:15px;letter-spacing:.04em;margin-top:1px;white-space:nowrap"></div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                    <button type="button" id="btn-ticket-pdf" onclick="downloadTicketPdf()"
+                            style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:7px;padding:7px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Descargar PDF
+                    </button>
+                    <button type="button" data-bs-dismiss="modal"
+                            style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:7px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:20px;line-height:1;padding:0;transition:background .15s">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <!-- Body -->
+            <div style="padding:0;background:#f4f4f4">
+                <iframe id="ticket-iframe" srcdoc="" style="width:100%;height:76vh;border:none;display:block"></iframe>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Detalle -->
+<div class="modal fade" id="modalReserva" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+        <div class="modal-content" style="border-radius:12px;overflow:hidden;border:none;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+
+            <!-- Header -->
+            <div style="background:#8B1A1A;padding:18px 22px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                <div>
+                    <div style="color:rgba(255,255,255,.65);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600">Detalle de reserva</div>
+                    <div id="md-place-header" style="color:#fff;font-weight:700;font-size:15px;margin-top:3px;line-height:1.3"></div>
+                </div>
+                <button type="button" data-bs-dismiss="modal"
+                        style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);border-radius:7px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:20px;line-height:1;padding:0;flex-shrink:0">
+                    &times;
+                </button>
+            </div>
+
+            <!-- Dates strip -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#f7f5f5;border-bottom:1px solid #ece9e9">
+                <div style="padding:14px 18px;border-right:1px solid #ece9e9">
+                    <div style="font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:4px">Llegada</div>
+                    <div id="md-checkin" style="font-size:13px;font-weight:700;color:#1a1a1a"></div>
+                </div>
+                <div style="padding:14px 18px;border-right:1px solid #ece9e9">
+                    <div style="font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:4px">Salida</div>
+                    <div id="md-checkout" style="font-size:13px;font-weight:700;color:#1a1a1a"></div>
+                </div>
+                <div style="padding:14px 18px">
+                    <div style="font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:4px">Duración</div>
+                    <div id="md-nights" style="font-size:13px;font-weight:700;color:#1a1a1a"></div>
+                </div>
+            </div>
+
+            <!-- Details grid -->
+            <div style="padding:20px 22px 4px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+                    <div style="padding:10px 0;border-bottom:1px solid #f0eeed">
+                        <div style="font-size:9px;color:#bbb;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Personas</div>
+                        <div id="md-persons" style="font-size:13px;font-weight:600;color:#333"></div>
+                    </div>
+                    <div style="padding:10px 0 10px 16px;border-bottom:1px solid #f0eeed">
+                        <div style="font-size:9px;color:#bbb;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Habitaciones</div>
+                        <div id="md-rooms" style="font-size:13px;font-weight:600;color:#333"></div>
+                    </div>
+                    <div style="padding:10px 0;border-bottom:1px solid #f0eeed">
+                        <div style="font-size:9px;color:#bbb;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Lavandería</div>
+                        <div id="md-laundry" style="font-size:13px;font-weight:600;color:#333"></div>
+                    </div>
+                    <div style="padding:10px 0 10px 16px;border-bottom:1px solid #f0eeed">
+                        <div style="font-size:9px;color:#bbb;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Estado</div>
+                        <div id="md-status" style="font-size:12px;font-weight:700"></div>
+                    </div>
+                </div>
+                <!-- Observations -->
+                <div style="padding:10px 0 14px">
+                    <div style="font-size:9px;color:#bbb;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Observaciones</div>
+                    <div id="md-notes" style="font-size:12px;color:#555;line-height:1.5"></div>
+                </div>
+            </div>
+
+            <!-- Total bar -->
+            <div style="background:#f7f5f5;border-top:1px solid #ece9e9;padding:14px 22px;display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Total</span>
+                <span id="md-total" style="font-size:22px;font-weight:800;color:#8B1A1A;letter-spacing:-.01em"></span>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@functions {
+    static string GetPaymentLabel(string status, bool hasPaid) => status switch {
+        "Cancelled"  => "Cancelada",
+        "CheckedOut" => "Finalizada",
+        "CheckedIn"  => hasPaid ? "Pagada" : "Pendiente de pago",
+        _            => hasPaid ? "Pago enviado" : "Pendiente de pago"
+    };
+
+    static string GetPaymentCss(string status, bool hasPaid) => status switch {
+        "Cancelled"  => "status-cancelled",
+        "CheckedOut" => "status-checkedout",
+        _            => hasPaid ? "status-paid" : "status-pending"
+    };
+}
+
+@section Scripts {
+<style>
+.icon-detail-btn { background:none;border:none;cursor:pointer;padding:2px; }
+.icon-detail-btn:hover svg { fill: var(--fodun-crimson); }
+.status-badge {
+    display:inline-block; padding:2px 8px; border-radius:10px;
+    font-size:10px; font-weight:700; white-space:nowrap;
+}
+.status-pending    { background:#FFF3CD; color:#856404; }
+.status-paid       { background:#D1ECF1; color:#0C5460; }
+.status-checkedout { background:#E2E3E5; color:#383D41; }
+.status-cancelled  { background:#F8D7DA; color:#721C24; }
+
+.btn-receipt-send {
+    display:inline-flex; align-items:center; gap:5px;
+    background:var(--fodun-crimson); color:#fff;
+    border:none; border-radius:6px; padding:4px 10px;
+    font-size:11px; font-weight:700; cursor:pointer;
+    text-decoration:none; transition:opacity .15s;
+}
+.btn-receipt-send:hover { opacity:.85; color:#fff; }
+.btn-ticket-eye {
+    background:none; border:none; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:6px;
+    color:#1a5bc7; transition:background .15s;
+}
+.btn-ticket-eye:hover { background:#e8f0fc; }
+</style>
+<script>
+// Mover modales al body para evitar problemas de stacking context con transforms CSS
+document.addEventListener('DOMContentLoaded', function () {
+    ['modalTicket', 'modalReserva'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) document.body.appendChild(el);
+    });
+});
+
+var _ticketPdfUrl = '';
+var _ticketRef    = '';
+
+function openTicket(viewUrl, downloadUrl, ref) {
+    _ticketPdfUrl = downloadUrl;
+    _ticketRef    = ref;
+    var modalEl = document.getElementById('modalTicket');
+    var iframe  = document.getElementById('ticket-iframe');
+    iframe.srcdoc = '';
+    document.getElementById('ticket-ref').textContent = '#' + ref;
+    fetch(viewUrl)
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            html = html.replace(/background:#f4f4f4/g, 'background:#ffffff');
+            html = html.replace(/margin:32px auto/g,  'margin:0 auto');
+            iframe.srcdoc = html;
+        })
+        .catch(function() {
+            iframe.srcdoc = '<p style="text-align:center;padding:60px;font-family:sans-serif;color:#c00">No se pudo cargar el ticket.</p>';
+        });
+    modalEl.addEventListener('hidden.bs.modal', function cleanup() {
+        iframe.srcdoc = '';
+        modalEl.removeEventListener('hidden.bs.modal', cleanup);
+    });
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+function downloadTicketPdf() {
+    if (!_ticketPdfUrl) return;
+    var btn = document.getElementById('btn-ticket-pdf');
+    if (btn) { btn.textContent = 'Descargando...'; btn.disabled = true; }
+    fetch(_ticketPdfUrl)
+        .then(function(r) { return r.blob(); })
+        .then(function(blob) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'ticket-' + _ticketRef + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+        })
+        .finally(function() {
+            if (btn) {
+                btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Descargar PDF';
+                btn.disabled = false;
+            }
+        });
+}
+function openModal(btn) {
+    var ci = btn.dataset.checkin.split('/');
+    var co = btn.dataset.checkout.split('/');
+    var d1 = new Date(ci[2], ci[1]-1, ci[0]);
+    var d2 = new Date(co[2], co[1]-1, co[0]);
+    var nights = Math.round((d2 - d1) / 86400000);
+    var nightLbl = nights === 1 ? 'noche' : 'noches';
+
+    document.getElementById('md-place-header').textContent = btn.dataset.place;
+    document.getElementById('md-checkin').textContent      = btn.dataset.checkin;
+    document.getElementById('md-checkout').textContent     = btn.dataset.checkout;
+    document.getElementById('md-nights').textContent       = nights + ' ' + nightLbl;
+    document.getElementById('md-persons').textContent      = btn.dataset.persons;
+    document.getElementById('md-rooms').textContent        = btn.dataset.rooms;
+    document.getElementById('md-notes').textContent        = btn.dataset.notes;
+    document.getElementById('md-total').textContent        = btn.dataset.total;
+
+    var laundryVal = btn.dataset.laundry;
+    var laundryEl  = document.getElementById('md-laundry');
+    laundryEl.textContent = (laundryVal === '$0' || laundryVal === '') ? 'No incluida' : laundryVal;
+    laundryEl.style.color = (laundryVal === '$0' || laundryVal === '') ? '#bbb' : '#333';
+
+    var status    = btn.dataset.status;
+    var statusEl  = document.getElementById('md-status');
+    statusEl.textContent = status;
+    var colors = { 'Pago enviado':'#0c5460', 'Pendiente de pago':'#856404', 'Cancelada':'#721c24', 'Finalizada':'#383d41', 'Pagada':'#155724' };
+    var bgs    = { 'Pago enviado':'#d1ecf1', 'Pendiente de pago':'#fff3cd', 'Cancelada':'#f8d7da', 'Finalizada':'#e2e3e5', 'Pagada':'#d4edda' };
+    statusEl.style.cssText = 'font-size:11px;font-weight:700;display:inline-block;padding:3px 10px;border-radius:20px;background:' + (bgs[status]||'#eee') + ';color:' + (colors[status]||'#333');
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalReserva')).show();
+}
+</script>
+}

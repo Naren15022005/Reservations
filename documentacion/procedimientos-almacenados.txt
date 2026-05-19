@@ -1,0 +1,178 @@
+================================================================================
+  PROCEDIMIENTOS ALMACENADOS
+================================================================================
+
+El sistema incluye 4 stored procedures obligatorios, todos definidos en el
+esquema dbo de la base de datos FODUN_Reservations. Se invocan desde la capa
+Infrastructure usando ADO.NET directamente sobre la conexión del DbContext de
+EF Core, sin abrir conexiones paralelas.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SP 1 — sp_GetAvailableRooms_ByDateRange
+────────────────────────────────────────────────────────────────────────────────
+
+Propósito:
+  Devuelve todas las habitaciones disponibles de una sede para un rango de
+  fechas dado y una capacidad mínima. No considera el número exacto de personas.
+
+Parámetros de entrada:
+  @AccommodationId   UNIQUEIDENTIFIER   Id de la sede
+  @CheckInDate       DATE               Fecha de llegada
+  @CheckOutDate      DATE               Fecha de salida
+  @MinCapacity       INT = 1            Capacidad mínima requerida
+
+Resultado (SELECT):
+  SeatId, SeatNumber, Type, Capacity, Description, Amenities, Nights
+
+Reglas de disponibilidad verificadas:
+  1. El Seat pertenece a la sede indicada y está activo
+  2. La capacidad del Seat es ≥ @MinCapacity
+  3. No existe ningún Blackout administrativo cuyo rango se solape con las fechas
+  4. No existe ninguna reserva en estado Confirmed o CheckedIn cuyo rango
+     se solape con las fechas (CheckInDate < @CheckOutDate AND CheckOutDate > @CheckInDate)
+
+Ordenamiento: Capacity ASC, SeatNumber ASC
+
+Uso en la aplicación:
+  Invocado opcionalmente cuando se busca disponibilidad filtrando solo por
+  capacidad mínima (sin tener en cuenta distribución de personas).
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SP 2 — sp_GetAvailableRooms_ByDateRangeAndPersons
+────────────────────────────────────────────────────────────────────────────────
+
+Propósito:
+  Variante del SP 1 orientada al usuario final. Añade columnas calculadas que
+  indican cuántas habitaciones del mismo tipo se necesitarían para alojar al
+  grupo y si el grupo cabe completo en una sola habitación.
+
+Parámetros de entrada:
+  @AccommodationId   UNIQUEIDENTIFIER   Id de la sede
+  @CheckInDate       DATE               Fecha de llegada
+  @CheckOutDate      DATE               Fecha de salida
+  @TotalPersons      INT                Total de personas del grupo
+
+Resultado (SELECT):
+  SeatId, SeatNumber, Type, Capacity, Description, Amenities,
+  RoomsNeededForAllPersons, FitsInOneRoom, Nights
+
+  Columnas calculadas:
+    RoomsNeededForAllPersons = CEILING(@TotalPersons / Capacity)
+    FitsInOneRoom            = CASE WHEN Capacity >= @TotalPersons THEN 1 ELSE 0 END
+
+Reglas de disponibilidad: idénticas al SP 1 (sin filtro de capacidad mínima).
+
+Ordenamiento: FitsInOneRoom DESC, Capacity ASC, SeatNumber ASC
+  (las habitaciones donde cabe todo el grupo aparecen primero)
+
+Uso en la aplicación:
+  Es el SP principal para la pantalla de disponibilidad. AvailabilityService
+  lo llama con los datos del formulario del usuario.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SP 3 — sp_GetApplicableTariffs
+────────────────────────────────────────────────────────────────────────────────
+
+Propósito:
+  Devuelve todas las tarifas vigentes y aplicables para un Seat en una fecha
+  de check-in y un número de personas concreto.
+
+Parámetros de entrada:
+  @SeatId          UNIQUEIDENTIFIER   Id de la habitación
+  @CheckInDate     DATE               Fecha de llegada (determina temporada)
+  @TotalPersons    INT                Total de personas
+
+Resultado (SELECT):
+  Id, SeatId, Season, MinPersons, MaxPersons, PricePerNight,
+  AdditionalPersonPrice, DaysOfWeek, IsExceptional, ValidFrom, ValidUntil,
+  IsSpecialApplicableToday
+
+  Columna calculada:
+    IsSpecialApplicableToday = 1 si IsExceptional=1 Y el día de semana
+    del @CheckInDate es lunes (2), martes (3), miércoles (4) o jueves (5)
+    según DATEPART(WEEKDAY, @CheckInDate) con SET DATEFIRST 7
+
+Filtros aplicados:
+  - MinPersons ≤ @TotalPersons ≤ MaxPersons
+  - ValidFrom ≤ @CheckInDate
+  - ValidUntil IS NULL OR ValidUntil ≥ @CheckInDate
+
+Ordenamiento: IsSpecialApplicableToday DESC, Season DESC
+  (tarifa especial primero; luego High, Low)
+
+Uso en la aplicación:
+  AvailabilityService lo usa para adjuntar la tarifa aplicable a cada
+  habitación disponible mostrada en pantalla.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SP 4 — sp_CalculateReservationCost
+────────────────────────────────────────────────────────────────────────────────
+
+Propósito:
+  Calcula el costo total de una reserva aplicando la tarifa más prioritaria,
+  el cargo por personas adicionales y, opcionalmente, el servicio de lavandería.
+
+Parámetros de entrada:
+  @SeatId                 UNIQUEIDENTIFIER   Id de la habitación
+  @CheckInDate            DATE               Fecha de llegada
+  @CheckOutDate           DATE               Fecha de salida
+  @TotalPersons           INT                Total de personas
+  @IncludeLaundry         BIT = 0            1 para incluir lavandería
+
+Parámetros de salida (OUTPUT):
+  @OutTotalCost           DECIMAL(18,2)      Costo total calculado
+  @OutNights              INT                Número de noches
+  @OutAdditionalPersons   INT                Personas por encima de capacidad
+
+Resultado (SELECT):
+  TotalCost, Nights, AdditionalPersons, PricePerNight,
+  AdditionalPersonPrice, LaundryServiceCost
+
+  El SELECT devuelve los mismos valores que los parámetros OUTPUT, más
+  el detalle de precios unitarios. La aplicación lee el resultado del SELECT
+  (más conveniente con ADO.NET + ExecuteReaderAsync).
+
+Lógica de cálculo:
+  1. Noches = DATEDIFF(DAY, @CheckInDate, @CheckOutDate)
+  2. Capacidad del Seat obtenida de la tabla Seats
+  3. PersonasAdicionales = MAX(0, @TotalPersons - Capacidad)
+  4. Selección de tarifa (TOP 1) con la misma prioridad del SP 3:
+       a. IsExceptional=1 y día lunes–jueves
+       b. Season = 'High'
+       c. Season = 'Low'
+  5. TotalCost = (PricePerNight × Noches) + (AdditionalPersonPrice × PersonasAdicionales × Noches)
+  6. Si @IncludeLaundry=1: TotalCost += 18.000
+
+Constantes de negocio utilizadas:
+  Lavandería (fija):               $18.000
+  PersonaAdicional (por defecto):  $16.000  (sobreescrita por la tarifa si existe)
+
+Uso en la aplicación:
+  TariffService.CalculateCostAsync lo invoca para la pantalla de presupuesto
+  y para calcular el costo definitivo al confirmar la reserva.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CÓMO SE INVOCAN DESDE LA APLICACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+Los 4 SPs son ejecutados en StoredProcedureRepository (Infrastructure) usando
+ADO.NET sobre la conexión abierta del DbContext:
+
+  var conn = _context.Database.GetDbConnection();
+  await EnsureOpenAsync(conn, ct);
+  using var cmd = conn.CreateCommand();
+  cmd.CommandType = CommandType.StoredProcedure;
+  cmd.CommandText = "dbo.sp_...";
+  // Se agregan parámetros con cmd.Parameters.Add(...)
+  using var reader = await cmd.ExecuteReaderAsync(ct);
+
+SP 4 declara parámetros OUTPUT (requeridos por la firma del SP) pero el
+resultado se lee desde el SELECT result set con ExecuteReaderAsync, ya que
+todos los valores calculados también se incluyen en esa proyección.
+
+================================================================================

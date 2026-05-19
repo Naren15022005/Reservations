@@ -1,0 +1,266 @@
+@page "{id:guid}"
+@model FODUN.Reservations.Api.Pages.Reservations.DetailModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Detalle de Reserva";
+    var cop = new CultureInfo("es-CO");
+    var r = Model.Reservation;
+    var isPending   = r?.Status == "Pending";
+    var isConfirmed = r?.Status == "Confirmed";
+    var shortId     = r is not null ? r.Id.ToString("N")[..8].ToUpper() : "";
+}
+
+<!-- Encabezado -->
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
+    <a asp-page="/Dashboard/Index" class="btn btn-ghost btn-sm" style="padding-left:0">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 12H5M11 18l-6-6 6-6"/>
+        </svg>
+        Mis reservas
+    </a>
+    <div>
+        <div class="eyebrow" style="margin-bottom:4px">Reserva #@shortId</div>
+        <h2 class="h-1" style="margin:0">Detalle de Reserva</h2>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="fodun-alert fodun-alert-success" style="margin-bottom:20px">@Model.SuccessMessage</div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="fodun-alert fodun-alert-error" style="margin-bottom:20px">@Model.ErrorMessage</div>
+}
+
+@if (r is not null)
+{
+    <div class="create-layout">
+
+        <!-- Columna izquierda -->
+        <div>
+
+            <!-- Estado -->
+            @if (isPending)
+            {
+                <div class="detail-card" style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--radius-md)">
+                    <div class="detail-card-body" style="display:flex;align-items:center;gap:14px">
+                        <div style="width:36px;height:36px;border-radius:50%;background:#FEF3C7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                            <svg width="18" height="18" fill="none" stroke="#D97706" stroke-width="2" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;font-size:14px;color:#92400E">Reserva pendiente de confirmación</div>
+                            <div style="font-size:12px;color:#78350F;margin-top:2px">
+                                Revisa los detalles y confirma tu reserva para asegurar tu alojamiento.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (isConfirmed)
+            {
+                <div class="detail-card" style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:var(--radius-md)">
+                    <div class="detail-card-body" style="display:flex;align-items:center;gap:14px">
+                        <div style="width:36px;height:36px;border-radius:50%;background:#D1FAE5;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                            <svg width="18" height="18" fill="none" stroke="#059669" stroke-width="2.2" viewBox="0 0 24 24">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;font-size:14px;color:#065F46">¡Reserva confirmada!</div>
+                            <div style="font-size:12px;color:#047857;margin-top:2px">
+                                Tu reserva está asegurada. Preséntate en la sede el día de tu llegada.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Detalles de la estadía -->
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="margin-right:6px;vertical-align:middle">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Detalles de la estadía
+                </div>
+                <div class="detail-card-body">
+                    <div class="detail-row">
+                        <dt>Fecha de llegada</dt>
+                        <dd>@r.CheckInDate.ToString("dd 'de' MMMM 'de' yyyy", new CultureInfo("es-CO"))</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>Fecha de salida</dt>
+                        <dd>@r.CheckOutDate.ToString("dd 'de' MMMM 'de' yyyy", new CultureInfo("es-CO"))</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>Noches</dt>
+                        <dd><strong>@(r.CheckOutDate.DayNumber - r.CheckInDate.DayNumber)</strong></dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>Personas</dt>
+                        <dd>@r.TotalPersons</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>Habitaciones</dt>
+                        <dd>@r.NumberOfRoomsNeeded</dd>
+                    </div>
+                    @if (!string.IsNullOrEmpty(r.Notes))
+                    {
+                        <div class="detail-row">
+                            <dt>Observaciones</dt>
+                            <dd>@r.Notes</dd>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Resumen de costos -->
+            <div class="detail-card">
+                <div class="detail-card-header">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="margin-right:6px;vertical-align:middle">
+                        <rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/>
+                    </svg>
+                    Resumen de costos
+                </div>
+                <div class="detail-card-body">
+                    @{
+                        var nights = r.CheckOutDate.DayNumber - r.CheckInDate.DayNumber;
+                        var baseTotal = r.TotalCost - r.LaundryServiceCost;
+                    }
+                    <div class="summary-row">
+                        <span class="label">Costo base (@nights noches)</span>
+                        <span>@baseTotal.ToString("C0", cop)</span>
+                    </div>
+                    @if (r.LaundryService)
+                    {
+                        <div class="summary-row">
+                            <span class="label">Servicio de lavandería</span>
+                            <span>@r.LaundryServiceCost.ToString("C0", cop)</span>
+                        </div>
+                    }
+                    <div class="summary-row total">
+                        <span>Total</span>
+                        <span class="price-highlight">@r.TotalCost.ToString("C0", cop)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acciones -->
+            @if (!r.HasPaymentReceipt && r.Status != "Cancelled" && r.Status != "CheckedOut")
+            {
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="margin-right:6px;vertical-align:middle">
+                            <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                        </svg>
+                        Pago pendiente
+                    </div>
+                    <div class="detail-card-body">
+                        <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px">
+                            Tu reserva está asignada. Completa el pago para garantizar tu alojamiento.
+                        </p>
+                        <a asp-page="/Reservations/Pay" asp-route-id="@r.Id"
+                           class="btn btn-block btn-lg" style="text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>
+                            </svg>
+                            Ir al pago
+                        </a>
+                        <a asp-page="/Dashboard/Cancel" asp-route-id="@r.Id"
+                           class="btn btn-ghost btn-block" style="text-align:center">
+                            Cancelar reserva
+                        </a>
+                    </div>
+                </div>
+            }
+            else if (isConfirmed && r.HasPaymentReceipt)
+            {
+                <div class="detail-card">
+                    <div class="detail-card-header">Próximos pasos</div>
+                    <div class="detail-card-body" style="font-size:13px;color:var(--ink-3)">
+                        <ul style="margin:0;padding-left:18px;line-height:2">
+                            <li>Preséntate en la sede el <strong>@r.CheckInDate.ToString("dd 'de' MMMM", new CultureInfo("es-CO"))</strong>.</li>
+                            <li>Llevaremos el control del pago enviado y te confirmaremos en breve.</li>
+                            <li>Puedes cancelar tu reserva hasta 24 horas antes de la llegada.</li>
+                        </ul>
+                        <div style="margin-top:16px;display:flex;gap:10px">
+                            <a asp-page="/Dashboard/Index" class="btn btn-ghost btn-sm">Ver mis reservas</a>
+                            <a asp-page="/Dashboard/Cancel" asp-route-id="@r.Id"
+                               class="btn btn-ghost btn-sm" style="color:var(--error)">Cancelar reserva</a>
+                        </div>
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <!-- Columna derecha: resumen sticky -->
+        <div class="create-summary-sticky">
+            <div class="summary-card">
+                <div class="summary-card-title">Tu Reserva</div>
+
+                <div style="height:90px;border-radius:var(--radius-md);overflow:hidden;margin-bottom:14px;background:linear-gradient(135deg,var(--accent-dark),var(--accent));display:flex;align-items:center;justify-content:center">
+                    <div style="color:rgba(255,255,255,.7);font-family:var(--font-mono);font-size:11px;text-align:center;letter-spacing:.1em">
+                        @{
+                            var statusLabel = r.Status switch {
+                                "Pending"    => "PENDIENTE",
+                                "Confirmed"  => "CONFIRMADA",
+                                "CheckedIn"  => "EN CURSO",
+                                "CheckedOut" => "FINALIZADA",
+                                "Cancelled"  => "CANCELADA",
+                                _            => r.Status
+                            };
+                        }
+                        <div style="font-size:16px;font-weight:900;color:white;letter-spacing:.05em">@statusLabel</div>
+                        RESERVA
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="summary-row">
+                    <span class="label">Check-in</span>
+                    <span>@r.CheckInDate.ToString("dd MMM yyyy", new CultureInfo("es-CO"))</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Check-out</span>
+                    <span>@r.CheckOutDate.ToString("dd MMM yyyy", new CultureInfo("es-CO"))</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Noches</span>
+                    <span>@(r.CheckOutDate.DayNumber - r.CheckInDate.DayNumber)</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Personas</span>
+                    <span>@r.TotalPersons</span>
+                </div>
+                @if (r.LaundryService)
+                {
+                    <div class="summary-row">
+                        <span class="label">Lavandería</span>
+                        <span>@r.LaundryServiceCost.ToString("C0", cop)</span>
+                    </div>
+                }
+
+                <div class="summary-card-title" style="margin-top:16px;margin-bottom:8px">Total</div>
+                <div class="summary-grand">@r.TotalCost.ToString("C0", cop)</div>
+
+                <div style="font-size:11px;color:var(--ink-4);line-height:1.4">
+                    @if (isPending)
+                    {
+                        <span>El pago se realiza en la sede al momento del check-in.</span>
+                    }
+                    else
+                    {
+                        <span>Reserva confirmada. Te esperamos el día de tu llegada.</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+}

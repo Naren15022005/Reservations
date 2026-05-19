@@ -1,0 +1,272 @@
+================================================================================
+  MODELO DE BASE DE DATOS RELACIONAL
+================================================================================
+
+La base de datos se llama FODUN_Reservations y reside en SQL Server 2022.
+Contiene 9 tablas distribuidas en 5 grupos funcionales. Todos los identificadores
+primarios son UNIQUEIDENTIFIER (GUID) generados con NEWID(), excepto AuditLogs
+que usa BIGINT IDENTITY para eficiencia en inserciones de alta frecuencia.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DIAGRAMA DE RELACIONES
+────────────────────────────────────────────────────────────────────────────────
+
+  Users ─────────────────────────────────────────────┐
+    │ 1                                               │ 1
+    │                                                 │
+    │ N                                               │ N
+  Reservations ──── N ReservationItems               AuditLogs
+    │ 1                    │ N
+    │                      │
+    │ N                     │ 1
+  (FK UserId)           Seats ──── N Tariffs
+                          │ 1
+                          │
+                          │ N
+                       Blackouts
+
+  Accommodations ─── 1 ──── N ── Seats
+       (AccommodationId en Seats)
+
+  Relaciones de eliminación en cascada:
+    Accommodations → Seats → Tariffs
+    Accommodations → Seats → Blackouts
+    Reservations   → ReservationItems
+    Users          → Reservations
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Users
+────────────────────────────────────────────────────────────────────────────────
+
+Almacena los usuarios del sistema con sus credenciales y estado de seguridad.
+
+  Columna                     Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id                          UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  DocumentNumber              NVARCHAR(20)     NOT NULL, UNIQUE
+  FullName                    NVARCHAR(255)    NOT NULL
+  Email                       NVARCHAR(255)    NOT NULL, UNIQUE
+  PhoneNumber                 NVARCHAR(20)     NULL
+  PasswordHash                NVARCHAR(MAX)    NOT NULL
+  PasswordSalt                NVARCHAR(MAX)    NULL
+  IsEmailConfirmed            BIT              NOT NULL, DEFAULT 0
+  EmailConfirmationToken      NVARCHAR(MAX)    NULL
+  PasswordResetToken          NVARCHAR(MAX)    NULL
+  PasswordResetTokenExpiry    DATETIME2        NULL
+  LockoutEnabled              BIT              NOT NULL, DEFAULT 0
+  LockoutEndTime              DATETIME2        NULL
+  FailedLoginAttempts         INT              NOT NULL, DEFAULT 0
+  IsActive                    BIT              NOT NULL, DEFAULT 1
+  CreatedAt                   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt                   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  CreatedBy                   NVARCHAR(255)    NULL
+  UpdatedBy                   NVARCHAR(255)    NULL
+
+  Índices: IX_Users_Email (Email)
+  Restricciones: UQ_Users_Email, UQ_Users_DocumentNumber
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Accommodations
+────────────────────────────────────────────────────────────────────────────────
+
+Representa una sede recreativa o un conjunto de apartamentos.
+
+  Columna         Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id              UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  Code            NVARCHAR(50)     NOT NULL, UNIQUE  (ej: "HONDA-01")
+  Name            NVARCHAR(255)    NOT NULL
+  Description     NVARCHAR(MAX)    NULL
+  Type            NVARCHAR(50)     NOT NULL  ('RecreationalSite' | 'Apartment')
+  City            NVARCHAR(100)    NOT NULL
+  Address         NVARCHAR(MAX)    NULL
+  MaxCapacity     INT              NOT NULL
+  IsActive        BIT              NOT NULL, DEFAULT 1
+  CreatedAt       DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt       DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+
+  Restricciones: UQ_Accommodations_Code
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Seats
+────────────────────────────────────────────────────────────────────────────────
+
+Cada fila es una habitación o unidad de alojamiento dentro de una sede.
+Es la unidad mínima reservable del sistema.
+
+  Columna           Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id                UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  AccommodationId   UNIQUEIDENTIFIER NOT NULL, FK → Accommodations(Id) CASCADE
+  SeatNumber        NVARCHAR(50)     NOT NULL
+  Type              NVARCHAR(100)    NOT NULL  (ej: "Habitación Doble")
+  Capacity          INT              NOT NULL
+  Description       NVARCHAR(MAX)    NULL
+  Amenities         NVARCHAR(MAX)    NULL  (almacenado como texto JSON)
+  IsActive          BIT              NOT NULL, DEFAULT 1
+  CreatedAt         DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt         DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+
+  Restricciones: UQ_Seats_AccommodationId_SeatNumber
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Tariffs
+────────────────────────────────────────────────────────────────────────────────
+
+Define el precio por noche de un Seat según temporada, número de personas
+y rango de fechas de vigencia. Un mismo Seat puede tener múltiples tarifas.
+
+  Columna                 Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id                      UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  SeatId                  UNIQUEIDENTIFIER NOT NULL, FK → Seats(Id) CASCADE
+  Season                  NVARCHAR(50)     NOT NULL  ('Low' | 'High' | 'Special')
+  MinPersons              INT              NOT NULL, DEFAULT 1
+  MaxPersons              INT              NOT NULL
+  PricePerNight           DECIMAL(18,2)    NOT NULL
+  AdditionalPersonPrice   DECIMAL(18,2)    NULL
+  DaysOfWeek              NVARCHAR(50)     NULL
+  IsExceptional           BIT              NOT NULL, DEFAULT 0
+  ValidFrom               DATE             NOT NULL
+  ValidUntil              DATE             NULL  (NULL = sin fecha de expiración)
+  CreatedAt               DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt               DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+
+  Índices: IX_Tariffs_SeatId_Season (SeatId, Season)
+
+  Lógica de selección de tarifa:
+    1. Tarifa excepcional (IsExceptional=1) si el día es lunes–jueves
+    2. Temporada alta (High)
+    3. Temporada baja (Low)
+    Solo se aplica si MinPersons ≤ TotalPersons ≤ MaxPersons y la
+    fecha de check-in cae dentro del rango ValidFrom–ValidUntil.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Blackouts
+────────────────────────────────────────────────────────────────────────────────
+
+Bloqueos administrativos que impiden reservar un Seat en un rango de fechas.
+
+  Columna     Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id          UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  SeatId      UNIQUEIDENTIFIER NOT NULL, FK → Seats(Id) CASCADE
+  StartDate   DATE             NOT NULL
+  EndDate     DATE             NOT NULL
+  Reason      NVARCHAR(255)    NULL
+  CreatedAt   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+
+  Índices: IX_Blackouts_SeatId_Dates (SeatId, StartDate, EndDate)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Reservations
+────────────────────────────────────────────────────────────────────────────────
+
+Representa el ciclo de vida completo de una reserva: desde creación hasta
+check-out o cancelación.
+
+  Columna               Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id                    UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  UserId                UNIQUEIDENTIFIER NOT NULL, FK → Users(Id) CASCADE
+  CheckInDate           DATE             NOT NULL
+  CheckOutDate          DATE             NOT NULL
+  TotalPersons          INT              NOT NULL
+  NumberOfRoomsNeeded   INT              NOT NULL
+  Status                NVARCHAR(50)     NOT NULL, DEFAULT 'Pending'
+                          ('Pending' | 'Confirmed' | 'CheckedIn' |
+                           'CheckedOut' | 'Cancelled')
+  TotalCost             DECIMAL(18,2)    NOT NULL
+  LaundryService        BIT              NOT NULL, DEFAULT 0
+  LaundryServiceCost    DECIMAL(18,2)    NOT NULL, DEFAULT 0
+  Notes                 NVARCHAR(MAX)    NULL
+  CreatedAt             DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt             DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  CancelledAt           DATETIME2        NULL
+  CancelledReason       NVARCHAR(MAX)    NULL
+
+  Índices: IX_Reservations_UserId_Status (UserId, Status)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: ReservationItems
+────────────────────────────────────────────────────────────────────────────────
+
+Detalle de la reserva: qué Seat se reservó, a qué precio y por cuántas noches.
+Una reserva puede tener uno o más ítems (si el grupo requiere varias habitaciones).
+
+  Columna         Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id              UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  ReservationId   UNIQUEIDENTIFIER NOT NULL, FK → Reservations(Id) CASCADE
+  SeatId          UNIQUEIDENTIFIER NOT NULL, FK → Seats(Id)
+  TariffId        UNIQUEIDENTIFIER NULL,     FK → Tariffs(Id)
+  PricePerNight   DECIMAL(18,2)    NOT NULL
+  Nights          INT              NOT NULL
+
+  Índices: IX_ReservationItems_SeatId (SeatId) INCLUDE (PricePerNight, Nights)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: AuditLogs
+────────────────────────────────────────────────────────────────────────────────
+
+Registro de eventos del sistema: login, creación/cancelación de reservas, etc.
+Usa BIGINT IDENTITY como PK para maximizar rendimiento en inserciones.
+
+  Columna       Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id            BIGINT           PK, IDENTITY(1,1)
+  UserId        UNIQUEIDENTIFIER NULL  (puede ser anónimo)
+  Action        NVARCHAR(255)    NOT NULL
+  EntityType    NVARCHAR(100)    NULL
+  EntityId      UNIQUEIDENTIFIER NULL
+  OldValues     NVARCHAR(MAX)    NULL  (JSON)
+  NewValues     NVARCHAR(MAX)    NULL  (JSON)
+  Timestamp     DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  IpAddress     NVARCHAR(45)     NULL
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TABLA: Notifications
+────────────────────────────────────────────────────────────────────────────────
+
+Mensajes internos del sistema para el usuario (ej: confirmación de pago,
+cancelación procesada).
+
+  Columna     Tipo             Restricción
+  ─────────────────────────────────────────────────────────────────────────
+  Id          UNIQUEIDENTIFIER PK, DEFAULT NEWID()
+  UserId      UNIQUEIDENTIFIER NOT NULL, FK → Users(Id)
+  Title       NVARCHAR(255)    NOT NULL
+  Message     NVARCHAR(MAX)    NOT NULL
+  IsRead      BIT              NOT NULL, DEFAULT 0
+  CreatedAt   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+  UpdatedAt   DATETIME2        NOT NULL, DEFAULT GETUTCDATE()
+
+
+────────────────────────────────────────────────────────────────────────────────
+  RESUMEN DE TABLAS Y CONTEO DE RELACIONES
+────────────────────────────────────────────────────────────────────────────────
+
+  Tabla               PK tipo    FKs  Índices adicionales
+  ────────────────────────────────────────────────────────────────────────
+  Users               GUID       0    IX_Users_Email
+  Accommodations      GUID       0    —
+  Seats               GUID       1    —
+  Tariffs             GUID       1    IX_Tariffs_SeatId_Season
+  Blackouts           GUID       1    IX_Blackouts_SeatId_Dates
+  Reservations        GUID       1    IX_Reservations_UserId_Status
+  ReservationItems    GUID       3    IX_ReservationItems_SeatId
+  AuditLogs           BIGINT     0    —
+  Notifications       GUID       1    —
+
+================================================================================

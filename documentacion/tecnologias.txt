@@ -1,0 +1,202 @@
+================================================================================
+  TECNOLOGÍAS, LIBRERÍAS Y COMPONENTES
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PLATAFORMA Y LENGUAJE
+────────────────────────────────────────────────────────────────────────────────
+
+  .NET 8 (LTS)
+    Plataforma de ejecución. Permite despliegue multiplataforma (Linux/Windows).
+
+  C# 12
+    Lenguaje principal. Se aprovechan: records, pattern matching, primary
+    constructors, collection expressions ([]), file-scoped namespaces.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FRAMEWORK WEB
+────────────────────────────────────────────────────────────────────────────────
+
+  ASP.NET Core 8 — Razor Pages
+    Motor de UI del lado del servidor. Cada pantalla tiene un PageModel (.cs)
+    que maneja la lógica y una vista Razor (.cshtml) que produce el HTML.
+
+  Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation (8.0.0)
+    Permite recompilar las vistas Razor en caliente durante el desarrollo sin
+    reiniciar el servidor.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PERSISTENCIA
+────────────────────────────────────────────────────────────────────────────────
+
+  Entity Framework Core 8 (8.0.3)
+    ORM principal. Se usa en modo Code-First con Fluent API para todas las
+    configuraciones de entidades, índices y relaciones. No se usan Data
+    Annotations para mantener el dominio limpio.
+
+  Microsoft.EntityFrameworkCore.SqlServer (8.0.0)
+    Proveedor de SQL Server para EF Core. Producción apunta a SQL Server 2022.
+
+  Microsoft.EntityFrameworkCore.InMemory (8.0.0)
+    Proveedor en memoria para tests unitarios y de integración sin base de
+    datos real.
+
+  SQL Server 2022 Developer Edition
+    Motor de base de datos relacional de producción. Servido via Docker
+    (imagen mcr.microsoft.com/mssql/server:2022-latest).
+
+  ADO.NET (System.Data)
+    Usado directamente para ejecutar los 4 stored procedures. Se obtiene la
+    DbConnection del DbContext (GetDbConnection()) para no abrir una segunda
+    conexión paralela.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  AUTENTICACIÓN Y SEGURIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+  ASP.NET Core Cookie Authentication (8.0.0)
+    Esquema principal de autenticación. Las sesiones tienen expiración
+    deslizante (SlidingExpiration=true). La cookie es HttpOnly y Secure
+    en producción.
+
+  Microsoft.AspNetCore.Authentication.Google (8.0.0)
+    Implementa el flujo OAuth 2.0 con Google como proveedor de identidad.
+    El callback valida el token de Google, crea o localiza el usuario en
+    la base de datos y emite la cookie de sesión.
+
+  PBKDF2 + Salt aleatorio (System.Security.Cryptography)
+    Algoritmo de hashing de contraseñas. PasswordHasherService genera un
+    salt único por usuario usando RandomNumberGenerator.GetBytes(). Se
+    usa Rfc2898DeriveBytes con SHA-256 y 100.000 iteraciones.
+
+  ASP.NET Core Rate Limiting (System.Threading.RateLimiting)
+    Límite por IP: 10 solicitudes/minuto en rutas /auth/*, 200 req/min para
+    el resto. Implementado con FixedWindowRateLimiter particionado por IP.
+    Responde con HTTP 429 y cabecera Retry-After: 60.
+
+  Anti-forgery tokens (AddAntiforgery)
+    Protección CSRF en todos los formularios POST de Razor Pages.
+
+  Cabeceras de seguridad HTTP (middleware personalizado):
+    X-Frame-Options: DENY
+    X-Content-Type-Options: nosniff
+    X-XSS-Protection: 1; mode=block
+    Referrer-Policy: strict-origin-when-cross-origin
+    Permissions-Policy: geolocation=(), microphone=(), camera=()
+    Content-Security-Policy: restricción de scripts, estilos y fuentes
+
+
+────────────────────────────────────────────────────────────────────────────────
+  VALIDACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  FluentValidation (11.9.0)
+    Validación declarativa de comandos (CreateUserCommand, CreateReservationCommand,
+    CancelReservationCommand). Permite reglas complejas con mensajes de error en
+    español sin acoplar la validación a los modelos de dominio.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  LOGGING
+────────────────────────────────────────────────────────────────────────────────
+
+  Serilog (3.1.1)
+    Framework de logging estructurado. Reemplaza el ILogger<T> nativo de
+    ASP.NET Core.
+
+  Serilog.AspNetCore (8.0.1)
+    Integración con el pipeline de ASP.NET Core. Provee middleware
+    UseSerilogRequestLogging() que registra cada petición HTTP con
+    duración, método, ruta y código de respuesta.
+
+  Serilog.Sinks.Console (5.0.1)
+    Escribe logs a stdout/stderr con formato legible.
+
+  Serilog.Sinks.File (5.0.0)
+    Escribe logs a fichero rotativo diario en logs/fodun-{fecha}.log.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CORREO ELECTRÓNICO
+────────────────────────────────────────────────────────────────────────────────
+
+  System.Net.Mail (built-in .NET)
+    SmtpClient con TLS (StartTLS en puerto 587). Configurado para Gmail
+    (smtp.gmail.com). La cuenta requiere una "App Password" de Google
+    (no la contraseña principal de la cuenta).
+
+  Casos de uso:
+    - Confirmación de email tras el registro
+    - Recuperación de contraseña con token de un solo uso
+    - Envío de comprobante de reserva con PDF adjunto
+    - Notificación de cancelación
+
+
+────────────────────────────────────────────────────────────────────────────────
+  GENERACIÓN DE PDF
+────────────────────────────────────────────────────────────────────────────────
+
+  QuestPDF (2024.3.4)
+    Biblioteca para generar documentos PDF con una API fluente en C#.
+    TicketService genera el comprobante de la reserva en HTML primero
+    (guardado en wwwroot/tickets/) y después produce el PDF adjunto al
+    correo de confirmación.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  INFRAESTRUCTURA DE DESARROLLO
+────────────────────────────────────────────────────────────────────────────────
+
+  Docker + Docker Compose
+    El fichero docker-compose.yml levanta SQL Server 2022 Developer Edition
+    en el puerto 1433. Los datos persisten en un volumen bind-mount local
+    (.docker/sqlserver_data).
+
+  EF Core Design / Tools (8.0.0 / 8.0.3)
+    Paquetes necesarios para las migraciones (dotnet ef migrations add,
+    dotnet ef database update). Solo se incluyen en los proyectos que los
+    necesitan.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  TESTING
+────────────────────────────────────────────────────────────────────────────────
+
+  xUnit
+    Framework de pruebas unitarias e integración.
+
+  Microsoft.EntityFrameworkCore.InMemory
+    Proveedor InMemory usado en los tests para aislar la lógica sin
+    depender de una base de datos real.
+
+  FODUN.Reservations.Tests.Unit
+    Pruebas unitarias del dominio: 9 tests, todos pasando.
+    Cubren: Reservation.Cancel (casos válidos e inválidos), Money.Add/Multiply,
+    DateRange.Overlaps/Nights.
+
+  FODUN.Reservations.Tests.Integration
+    Pruebas de integración sobre los repositorios con DbContext InMemory.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PATRONES Y COMPONENTES PROPIOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Result<T> / Result (Application/Common/Result.cs)
+    Tipo de retorno de todos los servicios. Evita excepciones para flujos de
+    negocio normales. Contiene: IsSuccess, Error, Value.
+
+  FrozenSet<string> (.NET 8 — System.Collections.Frozen)
+    Usado en GetOccupiedDatesAsync para devolver un conjunto de fechas
+    ocupadas de solo lectura con acceso O(1) y sin overhead de concurrencia.
+
+  IUnitOfWork (Domain.Interfaces)
+    Abstracción sobre SaveChangesAsync() de EF Core. Todos los repositorios
+    comparten el mismo DbContext dentro de un request, garantizando atomicidad
+    sin exponer EF Core al dominio o la aplicación.
+
+================================================================================

@@ -1,3 +1,4 @@
+using FODUN.Reservations.Domain.Constants;
 using FODUN.Reservations.Domain.Aggregates;
 using FODUN.Reservations.Domain.Exceptions;
 
@@ -21,6 +22,8 @@ public sealed class User : BaseEntity
     public bool IsActive { get; private set; } = true;
     public string? CreatedBy { get; private set; }
     public string? UpdatedBy { get; private set; }
+    public string? ExternalProvider { get; private set; }
+    public string? ExternalId { get; private set; }
 
     private User() { }
 
@@ -51,6 +54,36 @@ public sealed class User : BaseEntity
         };
     }
 
+    public static User CreateFromExternal(
+        string fullName,
+        string email,
+        string provider,
+        string externalId)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new DomainException("El correo electrónico es requerido.");
+
+        var docNumber = $"EXT-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        return new User
+        {
+            DocumentNumber = docNumber,
+            FullName = string.IsNullOrWhiteSpace(fullName) ? email.Split('@')[0] : fullName.Trim(),
+            Email = email.Trim().ToLowerInvariant(),
+            PasswordHash = string.Empty,
+            IsEmailConfirmed = true,
+            ExternalProvider = provider,
+            ExternalId = externalId
+        };
+    }
+
+    public void LinkExternalProvider(string provider, string externalId)
+    {
+        ExternalProvider = provider;
+        ExternalId = externalId;
+        IsEmailConfirmed = true;
+        SetUpdated();
+    }
+
     public void ConfirmEmail()
     {
         IsEmailConfirmed = true;
@@ -78,10 +111,10 @@ public sealed class User : BaseEntity
     public void RegisterFailedLogin()
     {
         FailedLoginAttempts++;
-        if (FailedLoginAttempts >= 5)
+        if (FailedLoginAttempts >= BusinessRules.MaxFailedLoginAttempts)
         {
             LockoutEnabled = true;
-            LockoutEndTime = DateTime.UtcNow.AddMinutes(15);
+            LockoutEndTime = DateTime.UtcNow.AddMinutes(BusinessRules.LockoutDurationMinutes);
         }
         SetUpdated();
     }
@@ -101,6 +134,13 @@ public sealed class User : BaseEntity
         PasswordResetToken == token &&
         PasswordResetTokenExpiry.HasValue &&
         PasswordResetTokenExpiry > DateTime.UtcNow;
+
+    public void UpdateProfile(string fullName, string? phoneNumber)
+    {
+        FullName    = fullName.Trim();
+        PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
+        SetUpdated();
+    }
 
     public void Deactivate() { IsActive = false; SetUpdated(); }
 }

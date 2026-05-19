@@ -1,0 +1,376 @@
+@page
+@model FODUN.Reservations.Api.Pages.Accommodations.IndexModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Explorar Destinos";
+    var cop = new CultureInfo("es-CO");
+}
+
+<!-- Hero header -->
+<div style="margin-bottom:28px">
+    <div class="eyebrow" style="margin-bottom:8px">Catálogo de destinos</div>
+    <h1 class="h-display" style="margin:0 0 8px">
+        Encuentra tu próximo <em>descanso.</em>
+    </h1>
+    <p class="muted" style="font-size:14px;max-width:560px;line-height:1.55;margin:0">
+        Sedes recreativas y apartamentos disponibles para asociados y su grupo familiar.
+        Consulta disponibilidad y haz tu reserva en minutos.
+    </p>
+</div>
+
+<!-- Search bar -->
+<div class="search-wrap">
+    <div class="search-pills">
+        <span class="pill pill-mono">@Model.Accommodations.Count() destinos</span>
+        <span class="pill pill-mono">Tarifas @DateTime.Now.Year</span>
+        <span class="pill pill-accent">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+            Disponible en línea
+        </span>
+    </div>
+
+    <div class="search-bar">
+
+        <!-- Destino -->
+        <div class="search-seg" id="seg-destino">
+            <button type="button" class="search-trigger" onclick="sdToggle('destino')">
+                <div class="search-trigger-inner">
+                    <span class="search-label">Destino</span>
+                    <span class="search-val placeholder" id="val-destino">Cualquier destino</span>
+                </div>
+                <svg class="search-chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="search-drop" id="drop-destino">
+                <div class="search-drop-item is-active" data-v="" onclick="sdPick('destino','','Cualquier destino')">
+                    <svg class="drop-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                    Cualquier destino
+                </div>
+                @foreach (var city in Model.Accommodations.Select(a => a.City).Distinct().OrderBy(c => c))
+                {
+                    <div class="search-drop-item" data-v="@city" onclick="sdPick('destino','@city','@city')">
+                        <svg class="drop-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                        @city
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="search-sep"></div>
+
+        <!-- Fechas -->
+        <div class="search-seg search-seg-dates" id="seg-fechas">
+            <button type="button" class="search-trigger" onclick="openCal()">
+                <div class="search-trigger-inner">
+                    <span class="search-label">Fechas</span>
+                    <span class="search-val placeholder" id="val-fechas">Elegir fechas</span>
+                </div>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="color:var(--ink-4);flex-shrink:0">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M8 2v4M16 2v4"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="search-sep"></div>
+
+        <!-- Personas -->
+        <div class="search-seg search-seg-sm">
+            <div class="search-persons-wrap">
+                <span class="search-label">Personas</span>
+                <div class="search-persons">
+                    <button type="button" class="search-persons-btn" id="persons-dec">−</button>
+                    <span class="search-persons-num" id="persons-val">2</span>
+                    <button type="button" class="search-persons-btn" id="persons-inc">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-sep"></div>
+
+        <!-- Tipo -->
+        <div class="search-seg" id="seg-tipo">
+            <button type="button" class="search-trigger" onclick="sdToggle('tipo')">
+                <div class="search-trigger-inner">
+                    <span class="search-label">Tipo</span>
+                    <span class="search-val placeholder" id="val-tipo">Sedes y apartamentos</span>
+                </div>
+                <svg class="search-chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="search-drop" id="drop-tipo">
+                <div class="search-drop-item is-active" data-v="" onclick="sdPick('tipo','','Sedes y apartamentos')">
+                    <svg class="drop-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                    Sedes y apartamentos
+                </div>
+                <div class="search-drop-item" data-v="Recreation" onclick="sdPick('tipo','Recreation','Sede recreativa')">
+                    <svg class="drop-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                    Sede recreativa
+                </div>
+                <div class="search-drop-item" data-v="Apartment" onclick="sdPick('tipo','Apartment','Apartamento')">
+                    <svg class="drop-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                    Apartamento
+                </div>
+            </div>
+        </div>
+
+        <button type="button" class="search-btn" onclick="applyFilters()">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7"/><path d="m20 20-4.35-4.35"/>
+            </svg>
+            Buscar
+        </button>
+
+    </div>
+</div>
+
+<!-- Calendar modal -->
+<div id="cal-overlay" class="cal-overlay" style="display:none" onclick="calOverlayClick(event)">
+    <div class="cal-modal" onclick="event.stopPropagation()">
+        <div class="cal-modal-head">
+            <div>
+                <div class="eyebrow">Seleccionar fechas</div>
+                <div class="cal-range-label" id="cal-range-label">Elige tu fecha de llegada</div>
+            </div>
+            <button class="cal-close-btn" type="button" onclick="closeCal()">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="cal-modal-body">
+            <div class="cal-nav-row">
+                <button class="icon-btn" type="button" onclick="calNav(-1)">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                </button>
+                <div class="cal-legend">
+                    <span><span class="legend-dot ld-avail"></span>Disponible</span>
+                    <span><span class="legend-dot ld-range"></span>Rango</span>
+                    <span><span class="legend-dot ld-sel"></span>Selección</span>
+                </div>
+                <button class="icon-btn" type="button" onclick="calNav(1)">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </button>
+            </div>
+            <div id="cal-months" class="cal-months-grid"></div>
+        </div>
+        <div class="cal-modal-foot">
+            <div class="cal-nights-badge" id="cal-nights"></div>
+            <div class="cal-foot-actions">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="calClear()">Borrar fechas</button>
+                <button type="button" class="btn btn-sm" onclick="calConfirm()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!Model.Accommodations.Any())
+{
+    <div class="card card-pad" style="text-align:center;color:var(--ink-3)">
+        <p style="font-size:14px">No hay sedes registradas en este momento.</p>
+    </div>
+}
+else
+{
+    <div id="no-results" class="card card-pad" style="display:none;text-align:center;color:var(--ink-3);margin-bottom:16px">
+        <p style="font-size:14px">Ningún destino coincide con los filtros seleccionados.</p>
+    </div>
+    <div class="locations-grid">
+        @foreach (var acc in Model.Accommodations)
+        {
+            bool isApt       = acc.Type == "Apartment";
+            string typeLabel = isApt ? "Apartamento" : "Sede Recreativa";
+            int rooms        = acc.Seats.Count();
+            bool hasPrice    = Model.MinPrices.TryGetValue(acc.Id, out var minPrice);
+
+            <a asp-page="./Availability"
+               asp-route-accommodationId="@acc.Id"
+               class="location-card"
+               data-city="@acc.City"
+               data-type="@acc.Type"
+               data-capacity="@acc.MaxCapacity">
+
+                <div class="loc-img bg-@acc.Code.ToLower()">
+                    <span class="loc-tag">@typeLabel</span>
+                    <span class="loc-code">@acc.Code</span>
+                </div>
+
+                <div class="loc-body">
+                    <div>
+                        <div class="loc-title">@acc.Name</div>
+                        <div class="loc-sub">@acc.City</div>
+                    </div>
+
+                    <div class="loc-meta">
+                        <span>
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M2.5 21c0-4 3-6 6.5-6s6.5 2 6.5 6"/><circle cx="17" cy="9" r="2.2"/><path d="M16 14.5c2.7.2 4.5 1.8 4.5 4.5"/></svg>
+                            Hasta @acc.MaxCapacity personas
+                        </span>
+                        <span>
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 18V8m0 10h18V13a3 3 0 0 0-3-3H10v3"/><path d="M3 13h18"/><circle cx="6.5" cy="13" r="1.5"/></svg>
+                            @rooms @(rooms == 1 ? "alojamiento" : "alojamientos")
+                        </span>
+                    </div>
+
+                    <p class="loc-desc">@acc.Description</p>
+
+                    <div class="loc-footer">
+                        <div class="loc-price">
+                            @if (hasPrice)
+                            {
+                                <span>desde</span> <strong>@minPrice.ToString("C0", cop)</strong> <span>/ noche</span>
+                            }
+                        </div>
+                        <span class="btn btn-sm btn-outline" style="pointer-events:none">
+                            Ver disponibilidad
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@section Scripts {
+<script>
+// ── Dropdown state ───────────────────────────────────────────────
+const _sd = {
+    destino: { val: '', label: 'Cualquier destino' },
+    tipo:    { val: '', label: 'Sedes y apartamentos' }
+};
+
+function sdToggle(name) {
+    const seg = document.getElementById('seg-' + name);
+    const isOpen = seg.classList.contains('open');
+    sdCloseAll();
+    if (!isOpen) seg.classList.add('open');
+}
+function sdCloseAll() {
+    document.querySelectorAll('.search-seg.open').forEach(s => s.classList.remove('open'));
+}
+function sdPick(name, val, label) {
+    _sd[name] = { val, label };
+    const el = document.getElementById('val-' + name);
+    el.textContent = label;
+    el.classList.toggle('placeholder', !val);
+    document.querySelectorAll('#drop-' + name + ' .search-drop-item').forEach(item =>
+        item.classList.toggle('is-active', item.dataset.v === val));
+    sdCloseAll();
+}
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-seg')) sdCloseAll();
+});
+
+// ── Persons counter ──────────────────────────────────────────────
+let _persons = 2;
+document.getElementById('persons-dec').addEventListener('click', () => {
+    if (_persons > 1) document.getElementById('persons-val').textContent = --_persons;
+});
+document.getElementById('persons-inc').addEventListener('click', () => {
+    if (_persons < 20) document.getElementById('persons-val').textContent = ++_persons;
+});
+
+// ── Calendar ─────────────────────────────────────────────────────
+const MES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DOW_ES = ['L','M','M','J','V','S','D'];
+const _cal = { range: { start: null, end: null }, base: { y: new Date().getFullYear(), m: new Date().getMonth() } };
+
+function _iso(d) { return d.toISOString().slice(0, 10); }
+function _parse(s) { return new Date(s + 'T12:00:00'); }
+function _fmt(iso) {
+    if (!iso) return '';
+    const d = _parse(iso);
+    return d.getDate() + ' ' + MES_ES[d.getMonth()].slice(0, 3) + ' ' + d.getFullYear();
+}
+function _buildGrid(y, m) {
+    const startDow = (new Date(y, m, 1).getDay() + 6) % 7;
+    const dim = new Date(y, m + 1, 0).getDate();
+    const cells = Array(startDow).fill(null);
+    for (let d = 1; d <= dim; d++) cells.push(new Date(y, m, d));
+    while (cells.length % 7) cells.push(null);
+    return cells;
+}
+function _monthHTML(y, m) {
+    const today = _iso(new Date());
+    let h = '<div class="cal-month"><div class="cal-month-title">' + MES_ES[m] + ' ' + y + '</div><div class="calendar-wrap">';
+    DOW_ES.forEach(d => h += '<div class="cal-head">' + d + '</div>');
+    _buildGrid(y, m).forEach(d => {
+        if (!d) { h += '<div class="cal-cell out"></div>'; return; }
+        const iso = _iso(d);
+        const past = iso < today;
+        const isS = _cal.range.start === iso, isE = _cal.range.end === iso;
+        const inR = _cal.range.start && _cal.range.end && iso > _cal.range.start && iso < _cal.range.end;
+        const cls = ['cal-cell', past?'past':'', isS?'start':'', isE?'end':'', inR?'in-range':'', iso===today?'today':''].filter(Boolean).join(' ');
+        h += '<button class="' + cls + '" type="button"' + (past?' disabled':'') + ' onclick="calPick(\'' + iso + '\')">' + d.getDate() + '</button>';
+    });
+    return h + '</div></div>';
+}
+function _renderCal() {
+    let h = '';
+    for (let i = 0; i < 2; i++) {
+        let y = _cal.base.y, m = _cal.base.m + i;
+        if (m > 11) { m -= 12; y++; }
+        h += _monthHTML(y, m);
+    }
+    document.getElementById('cal-months').innerHTML = h;
+    const s = _cal.range.start, e = _cal.range.end;
+    document.getElementById('cal-range-label').textContent =
+        !s ? 'Elige tu fecha de llegada' :
+        !e ? _fmt(s) + ' → ¿Cuándo sales?' :
+             _fmt(s) + ' → ' + _fmt(e);
+    const nb = document.getElementById('cal-nights');
+    nb.textContent = (s && e) ? (Math.round((_parse(e) - _parse(s)) / 86400000)) + ' noches' : '';
+}
+
+function openCal() {
+    const ov = document.getElementById('cal-overlay');
+    if (ov.parentElement !== document.body) document.body.appendChild(ov);
+    ov.style.display = 'flex';
+    _renderCal();
+}
+function closeCal() { document.getElementById('cal-overlay').style.display = 'none'; }
+function calOverlayClick(e) { if (e.target === document.getElementById('cal-overlay')) closeCal(); }
+function calPick(iso) {
+    const r = _cal.range;
+    if (!r.start || (r.start && r.end)) _cal.range = { start: iso, end: null };
+    else if (iso < r.start) _cal.range = { start: iso, end: r.start };
+    else if (iso === r.start) _cal.range = { start: null, end: null };
+    else _cal.range = { start: r.start, end: iso };
+    _renderCal();
+}
+function calNav(dir) {
+    let y = _cal.base.y, m = _cal.base.m + dir;
+    if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+    _cal.base = { y, m };
+    _renderCal();
+}
+function calClear() { _cal.range = { start: null, end: null }; _renderCal(); }
+function calConfirm() {
+    const { start, end } = _cal.range;
+    const el = document.getElementById('val-fechas');
+    if (start) {
+        el.textContent = end ? _fmt(start) + ' → ' + _fmt(end) : _fmt(start);
+        el.classList.remove('placeholder');
+        sessionStorage.setItem('search_checkin', start);
+        if (end) sessionStorage.setItem('search_checkout', end);
+    } else {
+        el.textContent = 'Elegir fechas';
+        el.classList.add('placeholder');
+    }
+    closeCal();
+}
+
+// ── Filter ───────────────────────────────────────────────────────
+function applyFilters() {
+    sessionStorage.setItem('search_persons', _persons);
+    let visible = 0;
+    document.querySelectorAll('.location-card').forEach(card => {
+        const ok = (!_sd.destino.val || card.dataset.city === _sd.destino.val)
+                && (!_sd.tipo.val    || card.dataset.type === _sd.tipo.val)
+                && parseInt(card.dataset.capacity, 10) >= _persons;
+        card.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+    });
+    const nr = document.getElementById('no-results');
+    if (nr) nr.style.display = visible === 0 ? '' : 'none';
+}
+</script>
+}

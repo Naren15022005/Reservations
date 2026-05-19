@@ -1,0 +1,94 @@
+================================================================================
+  ARQUITECTURA DEL PROYECTO — SISTEMA DE RESERVAS
+================================================================================
+
+El proyecto sigue Clean Architecture (también llamada Onion Architecture o
+Arquitectura Hexagonal). La regla central es la Regla de Dependencia: las capas
+internas no conocen a las externas. El código de negocio no sabe que existe
+ASP.NET, Entity Framework ni SQL Server.
+
+Además se aplican principios de Domain-Driven Design (DDD): el dominio contiene
+toda la lógica de negocio y las reglas de negocio viven dentro de las entidades,
+no en servicios externos.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DIAGRAMA DE CAPAS Y SENTIDO DE DEPENDENCIAS
+────────────────────────────────────────────────────────────────────────────────
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │                           API                                │
+  │         (Razor Pages · Program.cs · Servicios web)          │
+  └────────────────────────┬─────────────────────────────────────┘
+                           │  depende de ↓
+  ┌────────────────────────▼─────────────────────────────────────┐
+  │                    INFRASTRUCTURE                            │
+  │     (EF Core · Repos · SMTP · Stored Procedures · PDF)      │
+  └────────────────────────┬─────────────────────────────────────┘
+                           │  depende de ↓
+  ┌────────────────────────▼─────────────────────────────────────┐
+  │                    APPLICATION                               │
+  │     (Interfaces · Commands · DTOs · Validadores)            │
+  └────────────────────────┬─────────────────────────────────────┘
+                           │  depende de ↓
+  ┌────────────────────────▼─────────────────────────────────────┐
+  │                      DOMAIN                                  │
+  │     (Entidades · Value Objects · Reglas · Excepciones)      │
+  │              ← Sin dependencias externas →                   │
+  └──────────────────────────────────────────────────────────────┘
+
+  DOMAIN no importa nada externo.
+  APPLICATION importa solo DOMAIN.
+  INFRASTRUCTURE importa APPLICATION + DOMAIN.
+  API importa todo (es el punto de entrada).
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PATRONES APLICADOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Domain-Driven Design (DDD)
+    Las entidades encapsulan su propia lógica. Una Reservation sabe cómo
+    cancelarse, confirmarse o recibir un comprobante de pago — nadie externo
+    manipula sus propiedades directamente.
+
+  Repository Pattern
+    Cada agregado tiene su propia interfaz de repositorio definida en el Dominio
+    (IReservationRepository, IUserRepository, etc.) e implementada en
+    Infrastructure. El dominio y la aplicación nunca tocan EF Core.
+
+  Unit of Work
+    IUnitOfWork envuelve SaveChangesAsync() y las transacciones explícitas.
+    Todos los repositorios comparten el mismo DbContext dentro de un request,
+    garantizando atomicidad.
+
+  Result<T> en lugar de excepciones
+    Los servicios retornan Result<T> / Result para señalar éxito o error sin
+    lanzar excepciones en flujos de control normales. Las excepciones de dominio
+    solo se usan para invariantes rotas (bugs, no casos de negocio esperados).
+
+  CQRS ligero (sin MediatR)
+    Las operaciones de escritura son Commands (CreateReservationCommand,
+    CancelReservationCommand) y las de lectura son Queries. No se usa MediatR
+    porque el tamaño del proyecto no lo justifica.
+
+  Stored Procedures para disponibilidad y tarifas
+    Los 4 procedimientos almacenados requeridos se invocan desde la aplicación
+    vía ADO.NET sobre la conexión del DbContext, sin abrir conexiones paralelas.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FLUJO DE UN REQUEST HTTP TÍPICO
+────────────────────────────────────────────────────────────────────────────────
+
+  Browser
+    → Razor Page (PageModel.OnGetAsync / OnPostAsync)
+      → Servicio de aplicación (IReservationService, IAvailabilityService...)
+        → StoredProcedureRepository [SP via ADO.NET] o Repository [LINQ/EF Core]
+          → Base de datos SQL Server
+        ← Resultado (Result<T>)
+      ← DTO
+    ← HTML renderizado
+  Browser
+
+================================================================================

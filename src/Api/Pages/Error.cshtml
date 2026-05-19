@@ -1,0 +1,15 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Error";
+    Layout = "_Layout";
+}
+<div class="text-center">
+    <h1 class="display-4">Oops!</h1>
+    <p>Ocurrió un error inesperado. Por favor intenta de nuevo.</p>
+    @if (Model.RequestId is not null)
+    {
+        <p><small class="text-muted">RequestId: @Model.RequestId</small></p>
+    }
+    <a asp-page="/Index" class="btn btn-primary">Volver al inicio</a>
+</div>

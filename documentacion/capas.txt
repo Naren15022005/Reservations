@@ -1,0 +1,220 @@
+================================================================================
+  ESTRUCTURA DE CAPAS IMPLEMENTADA
+================================================================================
+
+La solución esta dividida en 4 proyectos de codigo fuente y 2 de pruebas,
+cada uno con una responsabilidad especifica y delimitada.
+
+  Reservations.sln
+  ├── src/
+  │   ├── FODUN.Reservations.Domain          (nucleo del negocio)
+  │   ├── FODUN.Reservations.Application     (contratos y casos de uso)
+  │   ├── FODUN.Reservations.Infrastructure  (implementaciones tecnicas)
+  │   └── FODUN.Reservations.Api             (presentacion y punto de entrada)
+  └── tests/
+      ├── FODUN.Reservations.Tests.Unit
+      └── FODUN.Reservations.Tests.Integration
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CAPA 1 — DOMAIN  (nucleo puro, sin dependencias externas)
+────────────────────────────────────────────────────────────────────────────────
+
+Contiene todo lo que es el negocio: entidades, reglas, restricciones y contratos
+con el mundo exterior (interfaces de repositorios). Ningun paquete NuGet externo
+es referenciado aqui.
+
+  src/Domain/
+  ├── Aggregates/
+  │   ├── BaseEntity.cs              → Id (GUID), CreatedAt, UpdatedAt, SetUpdated()
+  │   ├── AuditLog.cs                → Registro de eventos del sistema
+  │   ├── Accommodation/
+  │   │   ├── Accommodation.cs       → Raiz de agregado: sede o apartamento
+  │   │   ├── Seat.cs                → Habitacion/alojamiento dentro de una sede
+  │   │   ├── Tariff.cs              → Precio por temporada, rango de personas y dias
+  │   │   └── Blackout.cs            → Bloqueo administrativo de fechas
+  │   ├── Reservation/
+  │   │   ├── Reservation.cs         → Raiz de agregado: ciclo de vida completo
+  │   │   └── ReservationItem.cs     → Linea de reserva (seat + noches + precio)
+  │   ├── User/
+  │   │   └── User.cs                → Raiz de agregado: autenticacion y perfil
+  │   └── Notification/
+  │       └── Notification.cs        → Mensaje interno para el usuario
+  ├── ValueObjects/
+  │   ├── Money.cs                   → Monto + moneda, inmutable, con suma/multiply
+  │   └── DateRange.cs               → Par de fechas con calculo de noches y solapamiento
+  ├── Enums/
+  │   ├── ReservationStatus.cs       → Pending, Confirmed, CheckedIn, CheckedOut, Cancelled
+  │   ├── AccommodationType.cs       → RecreationalSite, Apartment
+  │   └── SeasonType.cs              → Low, High, Special
+  ├── Exceptions/
+  │   ├── DomainException.cs         → Base de excepciones de negocio
+  │   ├── AccommodationNotAvailableException.cs
+  │   └── ReservationNotFoundException.cs
+  ├── Interfaces/                    → Contratos que Infrastructure debe cumplir
+  │   ├── IUserRepository.cs
+  │   ├── IAccommodationRepository.cs
+  │   ├── IReservationRepository.cs
+  │   ├── INotificationRepository.cs
+  │   ├── IAuditLogRepository.cs
+  │   └── IUnitOfWork.cs
+  └── Constants/
+      └── BusinessRules.cs           → LaundryFee=$18.000, AdditionalPersonFee=$16.000,
+                                       MaxFailedLoginAttempts=5, LockoutDurationMinutes=15
+
+  Lo que el dominio NO hace:
+    - No habla con la base de datos
+    - No envía correos
+    - No conoce HTTP ni sesiones
+    - No importa Entity Framework ni ningun ORM
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CAPA 2 — APPLICATION  (orquestacion y contratos de servicio)
+────────────────────────────────────────────────────────────────────────────────
+
+Define que puede hacer el sistema (casos de uso) sin decir como se hace.
+Contiene los contratos de servicios, los comandos/consultas, los validadores
+y los objetos de transferencia de datos (DTOs).
+
+  src/Application/
+  ├── Commands/                      → Operaciones que modifican estado
+  │   ├── CreateUser/
+  │   │   └── CreateUserCommand.cs   → record: DocumentNumber, FullName, Email, Password
+  │   ├── CreateReservation/
+  │   │   └── CreateReservationCommand.cs → record: UserId, AccommodationId, CheckIn,
+  │   │                                       CheckOut, TotalPersons, IncludeLaundry, SeatId
+  │   └── CancelReservation/
+  │       └── CancelReservationCommand.cs  → record: ReservationId, RequestingUserId, Reason
+  │
+  ├── Queries/                       → Consultas de solo lectura
+  │   ├── GetAvailableRooms/
+  │   │   └── GetAvailableRoomsQuery.cs
+  │   ├── CalculateReservationCost/
+  │   │   └── CalculateReservationCostQuery.cs
+  │   └── GetUserReservations/
+  │       └── GetUserReservationsQuery.cs
+  │
+  ├── Services/                      → Interfaces que Infrastructure implementa
+  │   ├── IUserService.cs            → RegisterAsync, LoginAsync, UpdateProfileAsync...
+  │   ├── IReservationService.cs     → CreateAsync, CancelAsync, GetByUserAsync...
+  │   ├── IAvailabilityService.cs    → GetAvailableRoomsAsync
+  │   ├── ITariffService.cs          → CalculateCostAsync
+  │   ├── INotificationService.cs    → CreateAsync, GetByUserAsync
+  │   ├── IEmailService.cs           → SendPasswordResetEmailAsync, SendPaymentTicketAsync...
+  │   ├── IStoredProcedureRepository.cs  → Los 4 SPs requeridos
+  │   ├── IPasswordHasher.cs         → Hash(password), Verify(password, hash, salt)
+  │   └── ITicketService.cs          → GenerateTicketAsync
+  │
+  ├── Dtos/                          → Objetos de transferencia (records inmutables)
+  │   ├── UserDto.cs
+  │   ├── ReservationDto.cs + ReservationItemDto.cs
+  │   ├── AccommodationDto.cs + SeatDto.cs
+  │   ├── AvailableRoomDto.cs
+  │   ├── ReservationCostDto.cs
+  │   ├── TariffDto.cs
+  │   ├── NotificationDto.cs
+  │   ├── SpAvailableRoomResult.cs   → Proyeccion de SP1/SP2
+  │   ├── SpTariffResult.cs          → Proyeccion de SP3
+  │   └── SpCostResult.cs            → Proyeccion de SP4
+  │
+  ├── Validators/                    → Validacion de comandos con FluentValidation
+  │   ├── CreateUserValidator.cs
+  │   ├── CreateReservationValidator.cs
+  │   └── CancelReservationValidator.cs
+  │
+  └── Common/
+      └── Result.cs                  → Result<T> y Result (patron sin excepciones)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CAPA 3 — INFRASTRUCTURE  (implementaciones tecnicas)
+────────────────────────────────────────────────────────────────────────────────
+
+Implementa todas las interfaces definidas en Domain y Application usando
+tecnologias concretas: EF Core, ADO.NET, SmtpClient, QuestPDF, etc.
+
+  src/Infrastructure/
+  ├── Persistence/
+  │   ├── ReservationsDbContext.cs        → DbContext con los 9 DbSets
+  │   ├── UnitOfWork.cs                   → SaveChangesAsync + transacciones
+  │   ├── DbSeeder.cs                     → Datos iniciales en dev (si BD vacia)
+  │   ├── Configurations/                 → Configuracion Fluent API por entidad
+  │   │   ├── UserConfiguration.cs
+  │   │   ├── AccommodationConfiguration.cs
+  │   │   ├── SeatConfiguration.cs
+  │   │   ├── TariffConfiguration.cs
+  │   │   ├── BlackoutConfiguration.cs
+  │   │   ├── ReservationConfiguration.cs
+  │   │   ├── ReservationItemConfiguration.cs
+  │   │   ├── AuditLogConfiguration.cs
+  │   │   └── NotificationConfiguration.cs
+  │   └── Repositories/
+  │       ├── UserRepository.cs
+  │       ├── AccommodationRepository.cs   → incluye GetOccupiedDatesAsync
+  │       ├── ReservationRepository.cs
+  │       ├── NotificationRepository.cs
+  │       ├── AuditLogRepository.cs
+  │       └── StoredProcedureRepository.cs → Ejecuta los 4 SPs via ADO.NET
+  ├── Services/
+  │   ├── AvailabilityService.cs           → Usa SP2 + SP3
+  │   ├── TariffService.cs                 → Usa SP4
+  │   └── PasswordHasherService.cs         → PBKDF2 + salt aleatorio
+  ├── External/
+  │   └── SmtpEmailService.cs              → Gmail SMTP con adjunto PDF
+  └── DependencyInjection.cs               → extension AddInfrastructure()
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CAPA 4 — API  (presentacion y punto de entrada)
+────────────────────────────────────────────────────────────────────────────────
+
+Es la capa mas externa. Contiene las paginas Razor, el Program.cs (configuracion
+del servidor) y los servicios de orquestacion (UserService, ReservationService)
+que coordinan multiples repositorios para completar un caso de uso.
+
+  src/Api/
+  ├── Pages/
+  │   ├── Auth/
+  │   │   ├── Login.cshtml(.cs)            → Formulario de acceso
+  │   │   ├── Register.cshtml(.cs)         → Formulario de registro
+  │   │   ├── Logout.cshtml(.cs)           → Cierre de sesion
+  │   │   ├── ForgotPassword.cshtml(.cs)   → Solicitar recuperacion por email
+  │   │   ├── ResetPassword.cshtml(.cs)    → Nueva contrasena con token
+  │   │   ├── ConfirmEmail.cshtml(.cs)     → Verificar correo con token
+  │   │   ├── GoogleSignIn.cshtml(.cs)     → Inicio de flujo OAuth Google
+  │   │   └── GoogleCallback.cshtml(.cs)   → Callback de Google
+  │   ├── Accommodations/
+  │   │   ├── Index.cshtml(.cs)            → Catalogo de sedes y apartamentos
+  │   │   └── Availability.cshtml(.cs)     → Busqueda de disponibilidad (usa SPs)
+  │   ├── Reservations/
+  │   │   ├── Create.cshtml(.cs)           → Confirmar y crear reserva
+  │   │   ├── Detail.cshtml(.cs)           → Detalle de una reserva
+  │   │   └── Pay.cshtml(.cs)              → Subir comprobante de pago
+  │   ├── Dashboard/
+  │   │   ├── Index.cshtml(.cs)            → Panel con las reservas del usuario
+  │   │   ├── Cancel.cshtml(.cs)           → Formulario de cancelacion
+  │   │   └── SubmitReceipt.cshtml(.cs)    → Envio de comprobante
+  │   ├── Profile/
+  │   │   ├── Index.cshtml(.cs)            → Ver y editar datos personales
+  │   │   └── Notifications.cshtml(.cs)    → Centro de notificaciones
+  │   └── Shared/
+  │       ├── _Layout.cshtml              → Layout con sidebar (usuarios auth)
+  │       └── _AuthLayout.cshtml          → Layout minimalista para login/registro
+  ├── Services/
+  │   ├── UserService.cs                  → Registro, login, perfil, recuperacion
+  │   ├── ReservationService.cs           → Crear, cancelar, pago, consultar
+  │   ├── NotificationService.cs          → Crear y consultar notificaciones
+  │   └── TicketService.cs                → Generar HTML + PDF del comprobante
+  ├── Models/Auth/
+  │   ├── LoginViewModel.cs
+  │   ├── RegisterViewModel.cs
+  │   ├── ForgotPasswordViewModel.cs
+  │   └── ResetPasswordViewModel.cs
+  ├── wwwroot/
+  │   ├── css/site.css                    → Estilos globales del sistema
+  │   ├── js/                             → Scripts del cliente
+  │   └── tickets/                        → Archivos HTML y PDF generados
+  └── Program.cs                          → Configuracion completa del servidor
+
+================================================================================

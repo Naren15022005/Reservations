@@ -1,0 +1,200 @@
+================================================================================
+  LÓGICA DE DISPONIBILIDAD Y RESERVAS
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CONCEPTO DE DISPONIBILIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+Una habitación (Seat) se considera DISPONIBLE para un rango de fechas si y
+solo si se cumplen las tres condiciones siguientes:
+
+  1. Está activa (IsActive = 1) y pertenece a la sede buscada.
+  2. No tiene ningún Blackout administrativo cuyas fechas se solapan con el
+     rango solicitado.
+  3. No tiene ninguna reserva activa (estado Confirmed o CheckedIn) cuyas
+     fechas se solapan con el rango solicitado.
+
+Criterio de solapamiento de intervalos [a, b) con [c, d):
+  Se solapan si  a < d  AND  b > c
+  → En SQL:  CheckInDate < @CheckOutDate AND CheckOutDate > @CheckInDate
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FLUJO DE BÚSQUEDA DE DISPONIBILIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+  Browser
+    → GET /Accommodations/Availability?accommodationId=...&checkIn=...&checkOut=...&persons=N
+      → AvailabilityModel.OnGetAsync (Razor Page)
+        → AvailabilityService.GetAvailableRoomsAsync(accommodationId, checkIn, checkOut, persons)
+          → StoredProcedureRepository → sp_GetAvailableRooms_ByDateRangeAndPersons (SP 2)
+            ← Lista de AvailableRoomDto con RoomsNeededForAllPersons y FitsInOneRoom
+          → (por cada habitación disponible)
+            StoredProcedureRepository → sp_CalculateReservationCost (SP 4)
+            ← ReservationCostDto con TotalCost, desglose de precios
+        ← Result<IEnumerable<AvailableRoomDto>>
+      ← Página HTML con listado de habitaciones y costos estimados
+  Browser
+
+  Paralelamente, la página carga:
+    - Fechas ocupadas (para el calendario visual) via AccommodationRepository.GetOccupiedDatesAsync
+    - Tarifas de referencia (tabla de precios) desde las entidades ya cargadas con ThenInclude
+    - Galería de habitaciones con información descriptiva
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FLUJO DE CREACIÓN DE UNA RESERVA
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Usuario confirma la reserva en /Reservations/Create
+     → POST con: AccommodationId, SeatId, CheckIn, CheckOut, TotalPersons,
+                 IncludeLaundry, UserId (desde claim de sesión)
+
+  2. CreateReservationValidator valida el comando:
+     - UserId, AccommodationId, SeatId no vacíos
+     - CheckIn < CheckOut
+     - CheckIn ≥ hoy
+     - TotalPersons ≥ 1
+
+  3. ReservationService.CreateAsync ejecuta:
+
+     a) Verificar que el usuario existe y está activo.
+
+     b) Verificar que la habitación (Seat) existe y está activa.
+        (GetSeatByIdAsync → incluye Tariffs y Blackouts)
+
+     c) Verificar que no existe conflicto de reserva:
+        IReservationRepository.HasConflictingReservationAsync(seatId, checkIn, checkOut)
+        → Consulta SQL: busca reserva Confirmed o CheckedIn con solapamiento de fechas
+        → Si existe conflicto → Result.Failure("La habitación no está disponible...")
+
+     d) Calcular el costo definitivo:
+        ITariffService.CalculateCostAsync(seatId, checkIn, checkOut, totalPersons, includeLaundry)
+        → Llama SP 4 para obtener TotalCost
+
+     e) Determinar habitaciones necesarias:
+        roomsNeeded = (int)Math.Ceiling((double)totalPersons / seat.Capacity)
+
+     f) Crear la entidad Reservation con estado inicial Pending.
+
+     g) Crear el ReservationItem asociando el Seat, el precio por noche y las noches.
+
+     h) Persistir con IUnitOfWork.SaveChangesAsync (transaccional).
+
+     i) Crear notificación interna al usuario ("Tu reserva fue creada").
+
+     j) Enviar correo de confirmación con comprobante PDF adjunto.
+        (Asíncrono: si el envío falla, la reserva ya fue guardada)
+
+  4. Redirigir a /Reservations/Detail/{id}
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CICLO DE VIDA DE UNA RESERVA
+────────────────────────────────────────────────────────────────────────────────
+
+  Pending → Confirmed → CheckedIn → CheckedOut
+                  ↘
+               Cancelled (desde Pending o Confirmed)
+
+  Pending:     Reserva creada, pendiente de confirmación de pago.
+  Confirmed:   Comprobante de pago subido y aceptado.
+  CheckedIn:   El huésped ha llegado al alojamiento.
+  CheckedOut:  El huésped ha abandonado el alojamiento.
+  Cancelled:   Cancelada por el usuario o por el administrador.
+
+  Regla de cancelación:
+    Solo se pueden cancelar reservas en estado Pending o Confirmed.
+    Las reservas en CheckedIn, CheckedOut o ya Cancelled no son cancelables.
+    Al cancelar se registra CancelledAt (timestamp) y CancelledReason.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FLUJO DE CANCELACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Usuario solicita cancelación en /Dashboard/Cancel
+     → POST con: ReservationId, Reason, UserId (desde sesión)
+
+  2. CancelReservationValidator valida el comando:
+     - ReservationId no vacío
+     - Reason no vacía (mínimo 10 caracteres)
+
+  3. ReservationService.CancelAsync ejecuta:
+     a) Cargar la reserva por Id.
+     b) Verificar que pertenece al usuario autenticado.
+     c) Llamar reservation.Cancel(reason) → lanza DomainException si el estado
+        no permite cancelación.
+     d) Persistir el cambio de estado.
+     e) Crear notificación interna ("Tu reserva fue cancelada").
+     f) Enviar correo de notificación de cancelación.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DETECCIÓN DE CONFLICTOS: DETALLE TÉCNICO
+────────────────────────────────────────────────────────────────────────────────
+
+HasConflictingReservationAsync en ReservationRepository:
+
+  return await _context.ReservationItems
+      .Join(_context.Reservations, ri => ri.ReservationId, r => r.Id, (ri, r) => ...)
+      .AnyAsync(x =>
+          x.SeatId == seatId &&
+          (x.Status == ReservationStatus.Confirmed || x.Status == ReservationStatus.CheckedIn) &&
+          x.CheckInDate  < checkOut &&
+          x.CheckOutDate > checkIn);
+
+Esta verificación cubre el solapamiento parcial en ambas direcciones:
+  - Nueva reserva empieza antes de que termine la existente
+  - Nueva reserva termina después de que empieza la existente
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CALENDARIO DE DISPONIBILIDAD VISUAL
+────────────────────────────────────────────────────────────────────────────────
+
+La pantalla de disponibilidad muestra un calendario con las fechas ya ocupadas
+marcadas en rojo. Esto se obtiene con GetOccupiedDatesAsync:
+
+  - Consulta todas las reservas Confirmed o CheckedIn que se solapan con
+    el rango [hoy, hoy + 6 meses] para todos los Seats de la sede.
+  - Expande cada rango de reserva en días individuales: for d = CheckIn to CheckOut-1
+  - Devuelve un IReadOnlySet<string> (FrozenSet) con fechas en formato "yyyy-MM-dd".
+  - La página serializa este conjunto a JSON y lo inyecta en el JavaScript del
+    calendario para pintar los días no disponibles.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  CÁLCULO DE TARIFAS Y COSTOS
+────────────────────────────────────────────────────────────────────────────────
+
+El sistema aplica la siguiente jerarquía de tarifas (replicada tanto en SP 3
+como en SP 4):
+
+  Prioridad 1 — Tarifa excepcional:
+    IsExceptional = 1 Y check-in es lunes, martes, miércoles o jueves.
+
+  Prioridad 2 — Temporada alta (High):
+    IsExceptional = 0, Season = 'High'.
+
+  Prioridad 3 — Temporada baja (Low):
+    IsExceptional = 0, Season = 'Low'.
+
+  En todos los casos se aplican los filtros:
+    MinPersons ≤ TotalPersons ≤ MaxPersons
+    ValidFrom ≤ CheckIn ≤ ValidUntil (o ValidUntil IS NULL)
+
+Fórmula de costo:
+  PersonasAdicionales = MAX(0, TotalPersons − Capacidad del Seat)
+  CostoBase   = PricePerNight × Noches
+  CostoExtra  = AdditionalPersonPrice × PersonasAdicionales × Noches
+  Lavandería  = 18.000 (fijo, solo si IncludeLaundry = true)
+  TotalCost   = CostoBase + CostoExtra + Lavandería
+
+Constantes de negocio (BusinessRules.cs):
+  LaundryFee             = 18.000 COP
+  AdditionalPersonFee    = 16.000 COP (valor por defecto si la tarifa no define uno)
+
+================================================================================

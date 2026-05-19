@@ -1,0 +1,69 @@
+@page "{id:guid}"
+@model FODUN.Reservations.Api.Pages.Dashboard.CancelModel
+@{
+    ViewData["Title"] = "Cancelar Reserva";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="d-flex align-items-center mb-4">
+            <a asp-page="./Index" class="btn btn-outline-secondary btn-sm me-3">&larr; Volver</a>
+            <h2 class="mb-0">Cancelar reserva</h2>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger">@Model.ErrorMessage</div>
+        }
+
+        @if (Model.Reservation is not null)
+        {
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <strong>Detalle de la reserva</strong>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Check-in</dt>
+                        <dd class="col-sm-7">@Model.Reservation.CheckInDate.ToString("dd/MM/yyyy")</dd>
+
+                        <dt class="col-sm-5">Check-out</dt>
+                        <dd class="col-sm-7">@Model.Reservation.CheckOutDate.ToString("dd/MM/yyyy")</dd>
+
+                        <dt class="col-sm-5">Personas</dt>
+                        <dd class="col-sm-7">@Model.Reservation.TotalPersons</dd>
+
+                        <dt class="col-sm-5">Total pagado</dt>
+                        <dd class="col-sm-7">
+                            <strong>@Model.Reservation.TotalCost.ToString("C0", new System.Globalization.CultureInfo("es-CO"))</strong>
+                        </dd>
+
+                        <dt class="col-sm-5">Estado</dt>
+                        <dd class="col-sm-7">
+                            <span class="badge bg-warning text-dark">@Model.Reservation.Status</span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>¿Estás seguro?</strong> Esta acción no se puede deshacer.
+            </div>
+
+            <div class="form-card">
+                <form method="post">
+                    <input type="hidden" name="id" value="@Model.Reservation.Id" />
+                    <div class="mb-3">
+                        <label class="form-label">Motivo de cancelación <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="3" required maxlength="500"
+                                  placeholder="Por favor indica el motivo de la cancelación..."></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">Confirmar cancelación</button>
+                        <a asp-page="./Index" class="btn btn-outline-secondary">Volver sin cancelar</a>
+                    </div>
+                </form>
+            </div>
+        }
+    </div>
+</div>

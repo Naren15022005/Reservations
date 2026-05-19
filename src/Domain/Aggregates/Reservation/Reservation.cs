@@ -21,6 +21,10 @@ public sealed class Reservation : BaseEntity
     public string? Notes { get; private set; }
     public DateTime? CancelledAt { get; private set; }
     public string? CancelledReason { get; private set; }
+    public bool HasPaymentReceipt { get; private set; }
+    public DateTime? PaymentReceiptSubmittedAt { get; private set; }
+    public string? PaymentMethod { get; private set; }
+    public string? PaymentReceiptFileName { get; private set; }
     public IReadOnlyCollection<ReservationItem> Items => _items.AsReadOnly();
 
     private Reservation() { }
@@ -100,6 +104,17 @@ public sealed class Reservation : BaseEntity
         Status = ReservationStatus.Cancelled;
         CancelledAt = DateTime.UtcNow;
         CancelledReason = reason?.Trim();
+        SetUpdated();
+    }
+
+    public void SubmitPaymentReceipt(string? paymentMethod = null, string? receiptFileName = null)
+    {
+        if (Status == ReservationStatus.Cancelled)
+            throw new DomainException("No se puede registrar pago en una reserva cancelada.");
+        HasPaymentReceipt = true;
+        PaymentMethod = paymentMethod;
+        PaymentReceiptFileName = receiptFileName;
+        PaymentReceiptSubmittedAt = DateTime.UtcNow;
         SetUpdated();
     }
 

@@ -1,0 +1,201 @@
+================================================================================
+  INSTRUCCIONES DE EJECUCIÓN DEL PROYECTO
+================================================================================
+
+Requisitos previos:
+  - .NET 8 SDK (https://dotnet.microsoft.com/download)
+  - Docker Desktop (o Docker Engine + Docker Compose)
+  - SQL Server Management Studio (opcional, para inspeccionar la BD)
+  - Una cuenta de Gmail con "App Password" habilitada (para el correo)
+  - Credenciales de Google OAuth 2.0 (para el inicio de sesión con Google)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PASO 1 — Levantar SQL Server con Docker
+────────────────────────────────────────────────────────────────────────────────
+
+Desde la raíz del repositorio:
+
+  docker-compose up -d
+
+Esto levanta un contenedor SQL Server 2022 Developer Edition en el puerto
+local 1433 con las siguientes credenciales:
+
+  Host:      localhost,1433
+  Usuario:   sa
+  Password:  FodunDev@2024
+
+Los datos persisten en .docker/sqlserver_data/ (volumen bind-mount local).
+
+Para verificar que el contenedor está sano:
+
+  docker ps
+  docker logs fodun_sqlserver
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PASO 2 — Crear la base de datos y el esquema
+────────────────────────────────────────────────────────────────────────────────
+
+Ejecutar los scripts SQL en orden usando sqlcmd, SSMS o Azure Data Studio.
+Los scripts se encuentran en scripts/sql/:
+
+  01_CreateDatabase.sql    → Crea la base de datos FODUN_Reservations
+  02_CreateSchema.sql      → Crea las 9 tablas e índices
+  03_StoredProcedures.sql  → Crea los 4 stored procedures
+  04_SeedData.sql          → Inserta datos iniciales (sedes, habitaciones, tarifas)
+
+Con sqlcmd desde el contenedor Docker:
+
+  docker exec -it fodun_sqlserver /opt/mssql-tools18/bin/sqlcmd \
+    -S localhost -U sa -P "FodunDev@2024" \
+    -i /scripts/sql/01_CreateDatabase.sql -C
+
+  docker exec -it fodun_sqlserver /opt/mssql-tools18/bin/sqlcmd \
+    -S localhost -U sa -P "FodunDev@2024" \
+    -i /scripts/sql/02_CreateSchema.sql -C
+
+  docker exec -it fodun_sqlserver /opt/mssql-tools18/bin/sqlcmd \
+    -S localhost -U sa -P "FodunDev@2024" \
+    -i /scripts/sql/03_StoredProcedures.sql -C
+
+  docker exec -it fodun_sqlserver /opt/mssql-tools18/bin/sqlcmd \
+    -S localhost -U sa -P "FodunDev@2024" \
+    -i /scripts/sql/04_SeedData.sql -C
+
+Nota: en modo Development (ver Paso 4), EnsureCreatedAsync() crea las tablas
+automáticamente desde EF Core si están vacías, pero NO crea los stored
+procedures ni los datos iniciales. Se recomienda ejecutar los scripts SQL.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PASO 3 — Configurar appsettings
+────────────────────────────────────────────────────────────────────────────────
+
+Copiar el archivo de ejemplo y rellenar los valores reales:
+
+  cp src/Api/appsettings.example.json src/Api/appsettings.Development.json
+
+Editar appsettings.Development.json:
+
+  {
+    "ConnectionStrings": {
+      "DefaultConnection": "Server=localhost,1433;Database=FODUN_Reservations;User Id=sa;Password=FodunDev@2024;Encrypt=false;TrustServerCertificate=true;"
+    },
+    "Authentication": {
+      "Google": {
+        "ClientId": "<tu-client-id>.apps.googleusercontent.com",
+        "ClientSecret": "<tu-client-secret>"
+      }
+    },
+    "Smtp": {
+      "Host": "smtp.gmail.com",
+      "Port": "587",
+      "From": "<tu-correo>@gmail.com",
+      "FromName": "Sistema de Reservas",
+      "Username": "<tu-correo>@gmail.com",
+      "Password": "<app-password-de-gmail>"
+    },
+    "AppSettings": {
+      "BaseUrl": "http://localhost:5000",
+      "SessionTimeoutMinutes": 30
+    }
+  }
+
+Cómo obtener el App Password de Gmail:
+  1. Ir a myaccount.google.com → Seguridad → Verificación en dos pasos
+  2. Desplazarse hasta "Contraseñas de aplicaciones"
+  3. Generar una nueva contraseña para "Correo" / "Otro"
+  4. Copiar las 16 letras generadas (sin espacios) en el campo Password
+
+Cómo obtener las credenciales de Google OAuth:
+  1. Ir a console.cloud.google.com → APIs y servicios → Credenciales
+  2. Crear un ID de cliente OAuth 2.0 de tipo "Aplicación web"
+  3. Agregar como URI de redireccionamiento autorizado:
+       http://localhost:5000/Auth/GoogleCallback
+  4. Copiar ClientId y ClientSecret al archivo de configuración
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PASO 4 — Compilar y ejecutar la aplicación
+────────────────────────────────────────────────────────────────────────────────
+
+Desde la raíz del repositorio:
+
+  dotnet build Reservations.sln
+
+Para ejecutar en modo Development:
+
+  dotnet run --project src/Api/FODUN.Reservations.Api.csproj \
+    --environment Development
+
+La aplicación queda disponible en:
+
+  http://localhost:5000
+
+En modo Development:
+  - Las cabeceras HTTPS no son obligatorias
+  - EF Core ejecuta EnsureCreatedAsync() al iniciar (crea tablas si no existen)
+  - DbSeeder inserta datos de prueba si las tablas están vacías
+  - Los logs se muestran en consola y en logs/fodun-{fecha}.log
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PASO 5 — Ejecutar las pruebas
+────────────────────────────────────────────────────────────────────────────────
+
+  dotnet test Reservations.sln
+
+Resultados esperados:
+  - FODUN.Reservations.Tests.Unit:        9 tests, todos pasando
+  - FODUN.Reservations.Tests.Integration: tests de repositorios con InMemory
+
+Los tests unitarios no requieren base de datos ni Docker.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  ESTRUCTURA DE DIRECTORIOS GENERADOS EN EJECUCIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  src/Api/
+  ├── logs/
+  │   └── fodun-{yyyy-MM-dd}.log       → Logs rotativos diarios
+  └── wwwroot/
+      └── tickets/
+          ├── *.html                   → Comprobantes HTML generados
+          └── *.pdf                    → Comprobantes PDF generados
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DETENER Y LIMPIAR EL ENTORNO
+────────────────────────────────────────────────────────────────────────────────
+
+Detener los contenedores (conserva los datos):
+
+  docker-compose stop
+
+Detener y eliminar contenedores (conserva el volumen de datos):
+
+  docker-compose down
+
+Eliminar también los datos persistidos:
+
+  docker-compose down -v
+
+
+────────────────────────────────────────────────────────────────────────────────
+  REFERENCIA RÁPIDA DE CREDENCIALES DE DESARROLLO
+────────────────────────────────────────────────────────────────────────────────
+
+  SQL Server
+    Host:      localhost,1433
+    Base de datos: FODUN_Reservations
+    Usuario:   sa
+    Password:  FodunDev@2024
+
+  Aplicación web
+    URL:       http://localhost:5000
+    Registro:  /Auth/Register
+    Login:     /Auth/Login
+
+================================================================================

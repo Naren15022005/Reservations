@@ -1,0 +1,1157 @@
+@page "{accommodationId:guid}"
+@model FODUN.Reservations.Api.Pages.Accommodations.AvailabilityModel
+@using System.Globalization
+@{
+    ViewData["Title"] = Model.AccommodationName;
+    var cop = new CultureInfo("es-CO");
+    var nights = (Model.CheckIn.HasValue && Model.CheckOut.HasValue)
+        ? (Model.CheckOut.Value.DayNumber - Model.CheckIn.Value.DayNumber) : 0;
+    var heroCss = Model.AccommodationCode switch {
+        "SVL" => "bg-svl", "SFS" => "bg-sfs",
+        "APM" => "bg-apm", "APB" => "bg-apb",
+        _ => "bg-sfs"
+    };
+    string[] meses = {"ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"};
+    var dateLabelStr = (Model.CheckIn.HasValue && Model.CheckOut.HasValue)
+        ? $"{Model.CheckIn.Value.Day} {meses[Model.CheckIn.Value.Month-1]} → {Model.CheckOut.Value.Day} {meses[Model.CheckOut.Value.Month-1]}"
+        : "";
+    var checkInStr  = Model.CheckIn?.ToString("yyyy-MM-dd")  ?? "";
+    var checkOutStr = Model.CheckOut?.ToString("yyyy-MM-dd") ?? "";
+    var costsJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.AvailableRooms.Select(r => {
+            Model.CostMap.TryGetValue(r.SeatId, out var c);
+            // Precio por persona adicional por noche (lo inferimos del DTO o usamos $16.000 por defecto)
+            var addlPricePerPersonPerNight = (c is not null && c.AdditionalPersons > 0 && nights > 0)
+                ? (double)(c.AdditionalPersonsTotal / (c.AdditionalPersons * nights))
+                : 16000.0;
+            return new {
+                seatId                = r.SeatId.ToString(),
+                seatNumber            = r.SeatNumber,
+                type                  = r.Type,
+                nights,
+                capacity              = r.Capacity,
+                persons               = Model.Persons,
+                baseOnlyTotal         = (double)(c?.BaseTotal ?? 0m),
+                additionalPersonPrice = addlPricePerPersonPerNight,
+                grandTotal            = (double)(c?.GrandTotal ?? 0m),
+                url                   = $"/Reservations/Create?seatId={r.SeatId}&accommodationId={Model.AccommodationId}&checkIn={checkInStr}&checkOut={checkOutStr}&persons={Model.Persons}"
+            };
+        })
+    );
+    var accCodeLower = Model.AccommodationCode.ToLowerInvariant();
+    var galJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.AllSeats.Select((s, i) => new {
+            name     = s.SeatNumber,
+            type     = s.Type,
+            capacity = s.Capacity,
+            desc     = s.Description ?? "",
+            amenities= (s.Amenities ?? "").Split(',').Select(a => a.Trim()).Where(a => a.Length > 0).ToArray(),
+            price    = s.LowPrice,
+            gradClass= $"gal-g{(i % 6) + 1} bg-{accCodeLower}"
+        }));
+}
+
+<!-- Volver -->
+<div class="avail-back-wrap">
+    <a asp-page="/Accommodations/Index" class="avail-back-link">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 12H5M11 18l-6-6 6-6"/>
+        </svg>
+        Volver al catálogo
+    </a>
+</div>
+
+<!-- ═══ HERO ═══════════════════════════════════════════════════════ -->
+<div class="avail-hero @heroCss">
+    <span class="avail-hero-tag">IMAGEN REFERENCIAL · @Model.AccommodationCode</span>
+    <div class="avail-hero-content">
+        <div class="avail-hero-left">
+            <div class="eyebrow" style="color:rgba(255,255,255,.6);margin-bottom:8px">
+                @Model.AccommodationTypeLabel · @Model.AccommodationCity
+            </div>
+            <h1 class="avail-hero-title">@Model.AccommodationName</h1>
+        </div>
+        <div class="avail-hero-right">
+            <span class="avail-hero-pill">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Hasta @Model.AccommodationMaxCapacity personas
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ TABS ════════════════════════════════════════════════════════ -->
+<div class="avail-tabs-bar">
+    <button class="avail-tab active" onclick="switchTab('alojamientos',this)">Alojamientos</button>
+    <button class="avail-tab" onclick="switchTab('galeria',this)">Galería</button>
+    <button class="avail-tab" onclick="switchTab('informacion',this)">Información</button>
+    <button class="avail-tab" onclick="switchTab('tarifas',this)">Tarifas</button>
+    <button class="avail-tab" onclick="switchTab('calendario',this)">Calendario</button>
+    <button class="avail-tab" onclick="switchTab('ubicacion',this)">Ubicación</button>
+</div>
+
+<!-- ═══ BODY ════════════════════════════════════════════════════════ -->
+<div class="avail-body">
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="fodun-alert fodun-alert-error" style="margin-bottom:18px">@Model.ErrorMessage</div>
+    }
+
+    <div class="avail-outer">
+
+        <!-- ── IZQUIERDA: contenido de tabs ─────────────────────── -->
+        <div class="avail-left">
+
+            <!-- ▸ TAB: ALOJAMIENTOS ─────────────────────────────── -->
+            <div id="tab-alojamientos">
+                @if (!Model.SearchPerformed)
+                {
+                    <div class="avail-empty-state">
+                        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24" style="color:var(--ink-4);margin-bottom:10px">
+                            <rect x="3" y="4" width="18" height="18" rx="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="9" y1="4" x2="9" y2="9"/><line x1="15" y1="4" x2="15" y2="9"/>
+                        </svg>
+                        <p>Elige tus fechas y número de personas para ver los alojamientos disponibles.</p>
+                    </div>
+                }
+                else if (!Model.AvailableRooms.Any())
+                {
+                    <div class="avail-empty-state">
+                        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24" style="color:var(--ink-4);margin-bottom:10px">
+                            <circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>
+                        </svg>
+                        <p>No hay alojamientos disponibles para las fechas seleccionadas.<br />Intenta con otras fechas o menos personas.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="avail-rooms-header">
+                        <span class="eyebrow">@Model.AvailableRooms.Count() alojamiento@(Model.AvailableRooms.Count() == 1 ? "" : "s") disponible@(Model.AvailableRooms.Count() == 1 ? "" : "s")</span>
+                        @if (nights > 0)
+                        {
+                            <span class="avail-nights-badge">@nights noche@(nights == 1 ? "" : "s")</span>
+                        }
+                    </div>
+
+                    <div class="avail-cards-grid">
+                        @foreach (var room in Model.AvailableRooms)
+                        {
+                            var cost = Model.CostMap.TryGetValue(room.SeatId, out var c) ? c : null;
+                            var amenitiesList = (room.Amenities ?? "").Split(',')
+                                .Select(a => a.Trim()).Where(a => a.Length > 0).ToList();
+
+                            <div class="avail-room-card" data-seat-id="@room.SeatId">
+                                <div class="avail-room-main">
+                                    <div class="avail-room-header">
+                                        <span class="avail-room-name">@room.SeatNumber</span>
+                                        <span class="avail-room-type-badge">@room.Type</span>
+                                    </div>
+                                    <div class="avail-room-meta">
+                                        <span>
+                                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                            </svg>
+                                            Hasta @room.Capacity personas
+                                        </span>
+                                        @if (!string.IsNullOrEmpty(room.Description))
+                                        {
+                                            <span style="color:var(--ink-3)">@room.Description</span>
+                                        }
+                                    </div>
+                                    @if (amenitiesList.Any())
+                                    {
+                                        <div class="avail-amenities">
+                                            @foreach (var a in amenitiesList.Take(5))
+                                            {
+                                                <span class="avail-amenity-pill">@a</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="avail-room-price-col">
+                                    <div>
+                                        <div class="avail-desde">DESDE</div>
+                                        <div class="avail-price-big">@room.PricePerNight.ToString("C0", cop)</div>
+                                        <div class="avail-price-sub">por noche</div>
+                                    </div>
+                                    <button type="button" class="avail-reserve-btn" id="reserve-btn-@room.SeatId" onclick="selectRoom('@room.SeatId')">
+                                        Reservar
+                                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- ▸ TAB: GALERÍA ─────────────────────────────────── -->
+            <div id="tab-galeria" style="display:none">
+                @{
+                    var cop2 = new System.Globalization.CultureInfo("es-CO");
+                    var galGradients = new[] { "gal-g1","gal-g2","gal-g3","gal-g4","gal-g5","gal-g6" };
+                    int gIdx = 0;
+                }
+                <div class="gal-grid">
+                    @foreach (var seat in Model.AllSeats)
+                    {
+                        var seatIdx = gIdx;
+                        var grad = galGradients[gIdx++ % galGradients.Length];
+                        var amenities = (seat.Amenities ?? "").Split(',')
+                            .Select(a => a.Trim()).Where(a => a.Length > 0).ToList();
+                        <div class="gal-card" onclick="openGalModal(@seatIdx)">
+                            <div class="gal-img @grad @heroCss">
+                                <span class="gal-capacity-badge">
+                                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                    </svg>
+                                    Hasta @seat.Capacity personas
+                                </span>
+                                <div class="gal-img-overlay"></div>
+                            </div>
+                            <div class="gal-body">
+                                <div class="gal-header">
+                                    <span class="gal-name">@seat.SeatNumber</span>
+                                    <span class="gal-type-badge">@seat.Type</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(seat.Description))
+                                {
+                                    <p class="gal-desc">@seat.Description</p>
+                                }
+                                @if (amenities.Any())
+                                {
+                                    <div class="gal-amenities">
+                                        @foreach (var a in amenities.Take(4))
+                                        {
+                                            <span class="avail-amenity-pill">@a</span>
+                                        }
+                                        @if (amenities.Count > 4)
+                                        {
+                                            <span class="gal-more-badge">+@(amenities.Count - 4)</span>
+                                        }
+                                    </div>
+                                }
+                                <div class="gal-footer">
+                                    <div>
+                                        <div class="gal-desde">DESDE</div>
+                                        <div class="gal-price">
+                                            @(seat.LowPrice.HasValue ? seat.LowPrice.Value.ToString("C0", cop2) : "—")
+                                        </div>
+                                        <div class="gal-price-sub">por noche</div>
+                                    </div>
+                                    @if (User.Identity?.IsAuthenticated == true && Model.CheckIn.HasValue && Model.CheckOut.HasValue)
+                                    {
+                                        <a class="avail-reserve-btn"
+                                           asp-page="/Reservations/Create"
+                                           asp-route-seatId="@seat.SeatId"
+                                           asp-route-accommodationId="@Model.AccommodationId"
+                                           asp-route-checkIn="@checkInStr"
+                                           asp-route-checkOut="@checkOutStr"
+                                           asp-route-persons="@Model.Persons"
+                                           onclick="event.stopPropagation()">
+                                            Reservar
+                                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="gal-dates-btn" onclick="event.stopPropagation();openCal()">
+                                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                                <line x1="3" y1="9" x2="21" y2="9"/>
+                                            </svg>
+                                            Elegir fechas
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- ▸ TAB: INFORMACIÓN ──────────────────────────────── -->
+            <div id="tab-informacion" style="display:none">
+
+                <!-- Descripción -->
+                <div class="avail-info-card">
+                    <div class="avail-info-card-eyebrow">Sobre @Model.AccommodationName</div>
+                    <p class="avail-info-desc">@(Model.AccommodationDescription ?? "Información no disponible.")</p>
+                </div>
+
+                <!-- Servicios incluidos -->
+                <div class="avail-info-section">
+                    <div class="avail-info-section-title">Servicios incluidos</div>
+                    <div class="avail-services-grid">
+                        @if (!Model.IsApartment)
+                        {
+                            <!-- Sede recreacional -->
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M2 12c0 5.523 4.477 10 10 10s10-4.477 10-10"/><path d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10"/><path d="M7 12c0 2.761 2.239 5 5 5s5-2.239 5-5c0-2.761-2.239-5-5-5"/>
+                                    </svg>
+                                </div>
+                                <span>Piscina</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                                    </svg>
+                                </div>
+                                <span>Asador BBQ</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                                    </svg>
+                                </div>
+                                <span>Parqueadero</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M12 22V12M12 12C12 12 7 9 4 6c3 0 5 1 8 3zM12 12c0 0 5-3 8-6-3 0-5 1-8 3z"/><path d="M12 22c-4-2-8-6-8-10a8 8 0 0 1 16 0c0 4-4 8-8 10z"/>
+                                    </svg>
+                                </div>
+                                <span>Zonas verdes</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                </div>
+                                <span>Canchas</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/>
+                                    </svg>
+                                </div>
+                                <span>Senderos</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Apartamento -->
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+                                    </svg>
+                                </div>
+                                <span>Wi-Fi</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                                    </svg>
+                                </div>
+                                <span>Televisor</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M3 11l19-9-9 19-2-8-8-2z"/>
+                                    </svg>
+                                </div>
+                                <span>Cocina equipada</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                                    </svg>
+                                </div>
+                                <span>Aire acond.</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+                                    </svg>
+                                </div>
+                                <span>Lavadora</span>
+                            </div>
+                            <div class="avail-service-item">
+                                <div class="avail-service-icon">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                                    </svg>
+                                </div>
+                                <span>Sala de estar</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="avail-stats-row">
+                    <div class="avail-stat-item">
+                        <div class="avail-stat-val">@Model.AccommodationMaxCapacity</div>
+                        <div class="avail-stat-label">CAPACIDAD TOTAL</div>
+                    </div>
+                    <div class="avail-stat-divider"></div>
+                    <div class="avail-stat-item">
+                        <div class="avail-stat-val">@Model.AccommodationCity</div>
+                        <div class="avail-stat-label">CIUDAD</div>
+                    </div>
+                    <div class="avail-stat-divider"></div>
+                    <div class="avail-stat-item">
+                        <div class="avail-stat-val">@Model.AccommodationTypeLabel</div>
+                        <div class="avail-stat-label">TIPO</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ▸ TAB: TARIFAS ──────────────────────────────────── -->
+            <div id="tab-tarifas" style="display:none">
+
+                <div class="avail-tarifas-wrap">
+                    <div class="avail-section-title">Tarifas por alojamiento</div>
+
+                    <div class="avail-tariff-table-wrap">
+                        <table class="avail-tariff-table">
+                            <thead>
+                                <tr>
+                                    <th>Alojamiento</th>
+                                    <th class="text-center">Capacidad</th>
+                                    <th class="text-right">Baja temporada</th>
+                                    <th class="text-right">Alta temporada</th>
+                                    <th class="text-right">Persona adicional</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Model.TariffRows)
+                                {
+                                    <tr>
+                                        <td class="avail-tariff-name">@row.SeatName</td>
+                                        <td class="text-center">
+                                            <span class="avail-tariff-cap">
+                                                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                                </svg>
+                                                @row.Capacity
+                                            </span>
+                                        </td>
+                                        <td class="text-right avail-tariff-price">
+                                            @(row.LowPrice.HasValue ? row.LowPrice.Value.ToString("C0", cop) : "—")
+                                        </td>
+                                        <td class="text-right avail-tariff-price avail-tariff-high">
+                                            @(row.HighPrice.HasValue ? row.HighPrice.Value.ToString("C0", cop) : "—")
+                                        </td>
+                                        <td class="text-right avail-tariff-addl">
+                                            @(row.AdditionalPersonPrice.HasValue ? "+" + row.AdditionalPersonPrice.Value.ToString("C0", cop) : "—")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="avail-tariff-banner">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span><strong>Tarifa especial lunes a jueves:</strong> aplica un descuento de aproximadamente 20% sobre la tarifa de alta temporada. Se calcula automáticamente al realizar tu reserva según las fechas elegidas.</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ▸ TAB: CALENDARIO ───────────────────────────────── -->
+            <div id="tab-calendario" style="display:none">
+                <div class="avail-tab-cal-card">
+
+                    <div class="tc-header-title">Disponibilidad de los próximos 60 días</div>
+                    <div class="tc-header-sub">Selecciona fechas para iniciar tu reserva.</div>
+
+                    <div class="tc-controls">
+                        <button type="button" class="tc-nav-btn" onclick="tabCalNav(-1)">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                        </button>
+                        <div class="tc-legend">
+                            <span class="tc-leg-item"><span class="tc-leg-disp"></span>Disponible</span>
+                            <span class="tc-leg-item"><span class="tc-leg-occ"></span>Ocupado</span>
+                            <span class="tc-leg-item"><span class="tc-leg-alta"></span>Temporada alta</span>
+                            <span class="tc-leg-item"><span class="tc-leg-sel"></span>Selección</span>
+                        </div>
+                        <button type="button" class="tc-nav-btn" onclick="tabCalNav(1)">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                        </button>
+                    </div>
+
+                    <div id="tab-cal-months" class="avail-tab-cal-grid"></div>
+
+                </div>
+            </div>
+
+            <!-- ── TAB: UBICACIÓN ────────────────────────────────── -->
+            @{
+                var mapQuery = Uri.EscapeDataString(
+                    (Model.AccommodationAddress is { Length: > 0 } addr ? addr + ", " : "")
+                    + "Colombia");
+                var gmapsEmbed  = $"https://maps.google.com/maps?q={mapQuery}&output=embed&z=15";
+                var gmapsOpen   = $"https://www.google.com/maps/search/?api=1&query={mapQuery}";
+                var osmOpen     = $"https://www.openstreetmap.org/search?query={mapQuery}";
+            }
+            <div id="tab-ubicacion" style="display:none">
+                <div class="loc-wrap">
+
+                    <!-- Encabezado de datos -->
+                    <div class="loc-header">
+                        <div class="loc-city-badge">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            @Model.AccommodationCity
+                        </div>
+                        <div class="loc-name">@Model.AccommodationName</div>
+                        @if (!string.IsNullOrEmpty(Model.AccommodationAddress))
+                        {
+                            <div class="loc-address">@Model.AccommodationAddress</div>
+                        }
+                        <div class="loc-actions">
+                            <a href="@gmapsOpen" target="_blank" rel="noopener" class="loc-btn loc-btn-primary">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                    <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                                </svg>
+                                Google Maps
+                            </a>
+                            <a href="@osmOpen" target="_blank" rel="noopener" class="loc-btn">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="2" y1="12" x2="22" y2="12"/>
+                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                                </svg>
+                                OpenStreetMap
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Mapa embebido -->
+                    <div class="loc-map-wrap">
+                        <iframe
+                            class="loc-map"
+                            src="@gmapsEmbed"
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+
+                </div>
+            </div>
+
+        </div><!-- /avail-left -->
+
+        <!-- ── DERECHA: panel búsqueda ─────────────────────────── -->
+        <div class="avail-panel-col">
+            <div class="avail-search-panel">
+
+                <div class="eyebrow" style="margin-bottom:6px">Tu búsqueda</div>
+                <div class="avail-panel-title" id="panel-title">
+                    @(Model.SearchPerformed && Model.AvailableRooms.Any() ? "Elige un alojamiento" : "Selecciona fechas")
+                </div>
+
+                <form method="get" id="search-form">
+                    <div class="avail-field-group">
+                        <div class="avail-field-label">Fechas</div>
+                        <button type="button" class="avail-date-trigger" onclick="openCal()">
+                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <line x1="3" y1="9" x2="21" y2="9"/>
+                                <line x1="9" y1="4" x2="9" y2="9"/>
+                                <line x1="15" y1="4" x2="15" y2="9"/>
+                            </svg>
+                            <span id="date-label">
+                                @if (!string.IsNullOrEmpty(dateLabelStr))
+                                { @dateLabelStr }
+                                else
+                                { <span style="color:var(--ink-4)">Elegir fechas</span> }
+                            </span>
+                        </button>
+                        <input type="hidden" name="checkIn"  id="f-checkIn"  value="@checkInStr" />
+                        <input type="hidden" name="checkOut" id="f-checkOut" value="@checkOutStr" />
+                    </div>
+
+                    <div class="avail-field-group">
+                        <div class="avail-field-label">Personas</div>
+                        <div class="avail-persons-row">
+                            <button type="button" class="avail-counter-btn" onclick="adjPersons(-1)">−</button>
+                            <span class="avail-persons-val" id="persons-val">@(Model.Persons > 0 ? Model.Persons : 1)</span>
+                            <button type="button" class="avail-counter-btn" onclick="adjPersons(1)">+</button>
+                            <input type="hidden" name="persons" id="f-persons" value="@(Model.Persons > 0 ? Model.Persons : 1)" />
+                        </div>
+                        <div id="persons-cap-hint" class="avail-cap-hint" style="display:none">
+                            Capacidad máxima alcanzada
+                        </div>
+                    </div>
+
+                </form>
+
+                <!-- Hint: visible mientras no hay alojamiento seleccionado -->
+                <div id="panel-hint">
+                    @if (Model.SearchPerformed && Model.AvailableRooms.Any())
+                    {
+                        <p class="avail-panel-hint">Haz clic en <strong>Reservar</strong> en el alojamiento que prefieras para ver el resumen de costos.</p>
+                    }
+                    else
+                    {
+                        <p class="avail-panel-hint">Elige fechas para ver disponibilidad en tiempo real.</p>
+                    }
+                </div>
+
+                <!-- Resumen dinámico: aparece al seleccionar un alojamiento -->
+                <div id="panel-selection" style="display:none">
+                    <div class="avail-sel-indicator">
+                        <span id="sel-name" class="avail-sel-name"></span>
+                        <span id="sel-type" class="avail-room-type-badge" style="font-size:11px"></span>
+                    </div>
+
+                    <label class="avail-laundry-row">
+                        <input type="checkbox" id="laundry-check" onchange="updateLaundry()" />
+                        <span>Servicio de lavandería</span>
+                        <span class="avail-laundry-price">+$18.000</span>
+                    </label>
+
+                    <hr class="avail-panel-sep" />
+                    <div class="eyebrow" style="margin-bottom:10px">Resumen</div>
+                    <div class="avail-cost-row"><span>Noches</span><span id="sel-nights" class="avail-cost-val"></span></div>
+                    <div class="avail-cost-row"><span>Personas</span><span id="sel-persons" class="avail-cost-val"></span></div>
+                    <div class="avail-cost-row"><span>Alojamiento</span><span id="sel-base" class="avail-cost-val"></span></div>
+                    <div class="avail-cost-row"><span>Lavandería</span><span id="sel-laundry" class="avail-cost-val">$0</span></div>
+                    <div class="avail-cost-total">
+                        <span>Total estimado</span>
+                        <span id="sel-total"></span>
+                    </div>
+                    <hr class="avail-panel-sep" />
+                </div>
+
+                <!-- Botón de acción: aparece al seleccionar alojamiento -->
+                <a id="btn-iniciar" href="#" class="avail-search-btn" style="display:none">
+                    Iniciar reserva
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+
+    </div><!-- /avail-outer -->
+</div><!-- /avail-body -->
+
+<!-- ═══ CALENDAR MODAL ══════════════════════════════════════════════ -->
+<div id="cal-overlay" class="cal-overlay" style="display:none" onclick="calOverlayClick(event)">
+    <div class="cal-modal" onclick="event.stopPropagation()">
+        <div class="cal-modal-head">
+            <div>
+                <span class="eyebrow" style="display:block;margin-bottom:3px">Elige tus fechas</span>
+                <span class="cal-range-label" id="cal-range-label">Selecciona llegada y salida</span>
+            </div>
+            <button type="button" class="cal-close-btn" onclick="closeCal()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="cal-modal-body">
+            <div class="cal-nav-row">
+                <button type="button" class="icon-btn" onclick="calNav(-1)">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <div class="cal-legend">
+                    <span><span class="legend-dot ld-avail"></span>Disponible</span>
+                    <span><span class="legend-dot ld-occ"></span>Ocupado</span>
+                    <span><span class="legend-dot ld-alta"></span>Temporada alta</span>
+                    <span><span class="legend-dot ld-sel"></span>Selección</span>
+                </div>
+                <button type="button" class="icon-btn" onclick="calNav(1)">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+            </div>
+            <div id="cal-months" class="cal-months-grid"></div>
+        </div>
+        <div class="cal-modal-foot">
+            <div class="cal-nights-badge" id="cal-nights"></div>
+            <div class="cal-foot-actions">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="calClear()">Borrar fechas</button>
+                <button type="button" class="btn btn-sm" onclick="calConfirm()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ GALERÍA MODAL (carrusel) ════════════════════════════════════ -->
+<div id="gal-overlay" class="gal-overlay" style="display:none" onclick="closeGalModal(event)">
+    <div class="gal-modal-wrap" onclick="event.stopPropagation()">
+
+        <button type="button" class="gal-modal-close-btn" onclick="closeGalModal()">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+
+        <!-- Imagen / gradiente -->
+        <div class="gal-modal-img-area">
+            <button type="button" class="gal-modal-nav" id="gal-prev" onclick="galNav(-1)">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div id="gal-slide" class="gal-slide"></div>
+            <button type="button" class="gal-modal-nav" id="gal-next" onclick="galNav(1)">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <!-- Contador de slides -->
+            <span class="gal-slide-counter" id="gal-counter"></span>
+        </div>
+
+        <!-- Puntos de navegación -->
+        <div class="gal-dots-row" id="gal-dots"></div>
+
+        <!-- Info del alojamiento -->
+        <div class="gal-modal-body" id="gal-modal-body"></div>
+
+    </div>
+</div>
+
+@section Scripts {
+<script>
+// ── Personas ──────────────────────────────────────────────────────
+let _persons    = parseInt(document.getElementById('persons-val').textContent) || 1;
+const _globalMax = @Model.AccommodationMaxCapacity;
+let _maxPersons = _globalMax;
+
+function _updatePersonsButtons() {
+    const btnMinus = document.querySelector('.avail-counter-btn:first-of-type');
+    const btnPlus  = document.querySelector('.avail-counter-btn:last-of-type');
+    const capHint  = document.getElementById('persons-cap-hint');
+    if (btnMinus) btnMinus.disabled = _persons <= 1;
+    if (btnPlus)  btnPlus.disabled  = _persons >= _maxPersons;
+    if (capHint)  capHint.style.display = _persons >= _maxPersons ? '' : 'none';
+}
+
+function adjPersons(delta) {
+    const next = _persons + delta;
+    if (next < 1 || next > _maxPersons) return;
+    _persons = next;
+    document.getElementById('persons-val').textContent = _persons;
+    document.getElementById('f-persons').value = _persons;
+    _updatePersonsButtons();
+    _recalcPanel();
+}
+
+// ── Tab switching ─────────────────────────────────────────────────
+const _tabs = ['alojamientos','galeria','informacion','tarifas','calendario','ubicacion'];
+function switchTab(name, btn) {
+    _tabs.forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if (el) el.style.display = t === name ? 'block' : 'none';
+    });
+    document.querySelectorAll('.avail-tab').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    if (name === 'calendario') _renderTabCal();
+}
+
+// ── Datos ocupados desde servidor ─────────────────────────────────
+const _ocupados = new Set(@Html.Raw(Model.OccupiedDatesJson));
+
+// ── Calendario compartido (modal + tab) ───────────────────────────
+const MES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const today = new Date(); today.setHours(0,0,0,0);
+const _cal = {
+    range: { start: document.getElementById('f-checkIn').value  || null,
+             end:   document.getElementById('f-checkOut').value || null },
+    base:  { y: today.getFullYear(), m: today.getMonth() },
+    tabBase: { y: today.getFullYear(), m: today.getMonth() }
+};
+
+function _iso(d)  { return d.toISOString().slice(0,10); }
+function _parse(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function _fmt(iso){ const [,m,d]=iso.split('-'); return `${+d} ${MES_ES[+m-1].slice(0,3)}`; }
+function esAltaMes(m){ return (m>=5&&m<=7)||m===11||m===0; }
+
+function _buildGrid(y,m) {
+    const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate();
+    const cells=[]; let week=[];
+    for(let i=0;i<(first===0?6:first-1);i++) week.push(null);
+    for(let d=1;d<=days;d++){
+        week.push(new Date(y,m,d));
+        if(week.length===7){cells.push(week);week=[];}
+    }
+    if(week.length){while(week.length<7)week.push(null);cells.push(week);}
+    return cells;
+}
+
+// Calendario modal — estructura correcta: título fuera del grid, cal-head=DOW, cal-cell=días
+function _monthHTML(y,m) {
+    const grid=_buildGrid(y,m), dow=['L','M','M','J','V','S','D'];
+    const esAlta=esAltaMes(m);
+    let h=`<div>`;
+    h+=`<div class="cal-month-title">${MES_ES[m]} ${y}</div>`;
+    h+=`<div class="calendar-wrap">`;
+    dow.forEach(d=>h+=`<div class="cal-head">${d}</div>`);
+    grid.forEach(week=>week.forEach(day=>{
+        if(!day){h+='<div class="cal-cell out"></div>';return;}
+        const iso=_iso(day), isPast=day<today;
+        const isStart=iso===_cal.range.start, isEnd=iso===_cal.range.end;
+        const inRange=_cal.range.start&&_cal.range.end&&iso>_cal.range.start&&iso<_cal.range.end;
+        const isToday=iso===_iso(today);
+        const isOcup=_ocupados.has(iso);
+        const cls=['cal-cell',
+            isPast?'past':'',
+            isToday?'today':'',
+            isStart?'start':'',
+            isEnd?'end':'',
+            inRange?'in-range':'',
+            isOcup&&!isPast?'occupied':'',
+            esAlta&&!isOcup&&!isPast&&!isStart&&!isEnd?'high':'',
+        ].filter(Boolean).join(' ');
+        const dis=(isPast||isOcup)?'disabled':'';
+        h+=`<button type="button" class="${cls}" ${dis} onclick="calPick('${iso}')">${day.getDate()}</button>`;
+    }));
+    h+=`</div></div>`;
+    return h;
+}
+
+// Calendario tab — clases tc-* propias, sin conflicto con el modal
+function _monthHTMLFull(y,m,pickFn) {
+    const grid=_buildGrid(y,m);
+    const dow=['L','M','M','J','V','S','D'];
+    const esAlta=esAltaMes(m);
+    let h=`<div>`;
+    h+=`<div class="tc-month-title">${MES_ES[m]} ${y}</div>`;
+    h+=`<div class="tc-grid">`;
+    dow.forEach(d=>h+=`<div class="tc-dow">${d}</div>`);
+    grid.forEach(week=>week.forEach(day=>{
+        if(!day){h+='<div class="tc-cell tc-empty"></div>';return;}
+        const iso=_iso(day), isPast=day<today;
+        const isStart=iso===_cal.range.start, isEnd=iso===_cal.range.end;
+        const inRange=_cal.range.start&&_cal.range.end&&iso>_cal.range.start&&iso<_cal.range.end;
+        const isToday=iso===_iso(today);
+        const isOcup=_ocupados.has(iso);
+        let cls='tc-cell';
+        if(isPast)        cls+=' tc-past';
+        if(isToday)       cls+=' tc-today';
+        if(isStart)       cls+=' tc-start';
+        if(isEnd)         cls+=' tc-end';
+        if(inRange)       cls+=' tc-range';
+        if(isOcup&&!isPast) cls+=' tc-occ';
+        if(esAlta&&!isOcup&&!isPast&&!isStart&&!isEnd) cls+=' tc-alta';
+        const dis=(isPast||isOcup)?'disabled':'';
+        h+=`<button type="button" class="${cls}" ${dis} onclick="${pickFn}('${iso}')">${day.getDate()}</button>`;
+    }));
+    h+='</div></div>';
+    return h;
+}
+
+// ── Modal calendar ────────────────────────────────────────────────
+function _renderCal() {
+    const {y,m}=_cal.base;
+    const ny=m===11?y+1:y, nm=m===11?0:m+1;
+    document.getElementById('cal-months').innerHTML=_monthHTML(y,m)+_monthHTML(ny,nm);
+    const {start,end}=_cal.range;
+    let lbl='Selecciona llegada y salida';
+    if(start&&end) lbl=`${_fmt(start)} → ${_fmt(end)}`;
+    else if(start) lbl=`${_fmt(start)} → ?`;
+    document.getElementById('cal-range-label').textContent=lbl;
+    const n=(start&&end)?Math.round((_parse(end)-_parse(start))/86400000):0;
+    document.getElementById('cal-nights').textContent=n>0?`${n} noche${n===1?'':'s'}`:'';
+}
+
+function openCal() {
+    const ov=document.getElementById('cal-overlay');
+    if(ov.parentElement!==document.body) document.body.appendChild(ov);
+    ov.style.display='flex'; _renderCal();
+}
+function closeCal(){ document.getElementById('cal-overlay').style.display='none'; }
+function calOverlayClick(e){ if(e.target.id==='cal-overlay') closeCal(); }
+
+function calPick(iso) {
+    const r=_cal.range;
+    if(!r.start||(r.start&&r.end)){r.start=iso;r.end=null;}
+    else if(iso<=r.start){r.start=iso;r.end=null;}
+    else{r.end=iso;}
+    _renderCal();
+}
+function calNav(dir){
+    let{y,m}=_cal.base; m+=dir;
+    if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+    _cal.base={y,m}; _renderCal();
+}
+function calClear(){
+    _cal.range={start:null,end:null};
+    document.getElementById('f-checkIn').value='';
+    document.getElementById('f-checkOut').value='';
+    document.getElementById('date-label').innerHTML='<span style="color:var(--ink-4)">Elegir fechas</span>';
+    _renderCal();
+    _renderTabCal();
+}
+function calConfirm(){
+    const{start,end}=_cal.range;
+    if(start&&end){
+        document.getElementById('f-checkIn').value=start;
+        document.getElementById('f-checkOut').value=end;
+        document.getElementById('date-label').textContent=`${_fmt(start)} → ${_fmt(end)}`;
+    }
+    closeCal();
+    document.getElementById('search-form').submit();
+}
+
+// ── Tab calendar ──────────────────────────────────────────────────
+function _renderTabCal() {
+    const container=document.getElementById('tab-cal-months');
+    if(!container) return;
+    const{y,m}=_cal.tabBase;
+    const ny=m===11?y+1:y, nm=m===11?0:m+1;
+    container.innerHTML=_monthHTMLFull(y,m,'tabCalPick')+_monthHTMLFull(ny,nm,'tabCalPick');
+}
+
+function tabCalPick(iso) {
+    const r=_cal.range;
+    if(!r.start||(r.start&&r.end)){r.start=iso;r.end=null;}
+    else if(iso<=r.start){r.start=iso;r.end=null;}
+    else{r.end=iso;}
+    _renderTabCal();
+    // Actualizar panel
+    if(r.start&&r.end){
+        document.getElementById('f-checkIn').value=r.start;
+        document.getElementById('f-checkOut').value=r.end;
+        document.getElementById('date-label').textContent=`${_fmt(r.start)} → ${_fmt(r.end)}`;
+    } else if(r.start){
+        document.getElementById('f-checkIn').value=r.start;
+        document.getElementById('f-checkOut').value='';
+        document.getElementById('date-label').textContent=`${_fmt(r.start)} → ?`;
+    }
+}
+
+function tabCalNav(dir){
+    let{y,m}=_cal.tabBase; m+=dir;
+    if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+    _cal.tabBase={y,m}; _renderTabCal();
+}
+
+// ── Selección de alojamiento ─────────────────────────────────────
+const _roomCosts = @Html.Raw(costsJson);
+const _costsMap  = {};
+_roomCosts.forEach(r => _costsMap[r.seatId] = r);
+const _isAuth = @(User.Identity?.IsAuthenticated == true ? "true" : "false");
+const _COP2   = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
+let _selSeat  = null;
+
+function _clearSelection() {
+    document.querySelectorAll('.avail-room-card').forEach(card => {
+        card.classList.remove('is-selected');
+        const btn = card.querySelector('.avail-reserve-btn');
+        if (btn) {
+            btn.classList.remove('is-selected-btn');
+            btn.innerHTML = 'Reservar <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+        }
+    });
+    _selSeat = null;
+    _maxPersons = _globalMax;
+    _persons = Math.min(_persons, _maxPersons);
+    document.getElementById('persons-val').textContent = _persons;
+    document.getElementById('f-persons').value = _persons;
+    _updatePersonsButtons();
+    document.getElementById('panel-hint').style.display      = '';
+    document.getElementById('panel-selection').style.display = 'none';
+    document.getElementById('btn-iniciar').style.display     = 'none';
+    document.getElementById('panel-title').textContent       = '@(Model.SearchPerformed && Model.AvailableRooms.Any() ? "Elige un alojamiento" : "Selecciona fechas")';
+}
+
+function _recalcPanel() {
+    if (!_selSeat) return;
+    const d      = _costsMap[_selSeat];
+    const addl   = Math.max(0, _persons - d.capacity);
+    const base   = d.baseOnlyTotal + addl * d.nights * d.additionalPersonPrice;
+    const laundry = document.getElementById('laundry-check').checked ? 18000 : 0;
+    document.getElementById('sel-persons').textContent = _persons;
+    document.getElementById('sel-base').textContent    = _COP2.format(base);
+    document.getElementById('sel-laundry').textContent = _COP2.format(laundry);
+    document.getElementById('sel-total').textContent   = _COP2.format(base + laundry);
+    const reserveUrl = new URL(d.url, window.location.origin);
+    reserveUrl.searchParams.set('persons', _persons);
+    reserveUrl.searchParams.set('includeLaundry', laundry > 0 ? 'true' : 'false');
+    const btnIniciar = document.getElementById('btn-iniciar');
+    if (_isAuth) {
+        btnIniciar.href = reserveUrl.toString();
+    } else {
+        btnIniciar.href = '/Auth/Register?returnUrl=' + encodeURIComponent(reserveUrl.pathname + reserveUrl.search);
+    }
+}
+
+function selectRoom(seatId) {
+    if (_selSeat === seatId) { _clearSelection(); return; }
+
+    _clearSelection();
+    const selCard = document.querySelector(`.avail-room-card[data-seat-id="${seatId}"]`);
+    if (selCard) {
+        selCard.classList.add('is-selected');
+        const btn = selCard.querySelector('.avail-reserve-btn');
+        if (btn) { btn.classList.add('is-selected-btn'); btn.textContent = 'Seleccionado ✓'; }
+    }
+
+    const d = _costsMap[seatId];
+    if (!d) return;
+    _selSeat = seatId;
+
+    // Ajustar límite de personas al capacity del alojamiento elegido
+    _maxPersons = d.capacity;
+    if (_persons > _maxPersons) {
+        _persons = _maxPersons;
+        document.getElementById('persons-val').textContent = _persons;
+        document.getElementById('f-persons').value = _persons;
+    }
+    _updatePersonsButtons();
+
+    document.getElementById('sel-name').textContent   = d.seatNumber;
+    document.getElementById('sel-type').textContent   = d.type;
+    document.getElementById('sel-nights').textContent = d.nights;
+    document.getElementById('laundry-check').checked  = false;
+    document.getElementById('panel-title').textContent = 'Tu selección';
+
+    _recalcPanel();
+
+    document.getElementById('panel-hint').style.display      = 'none';
+    document.getElementById('panel-selection').style.display = '';
+    document.getElementById('btn-iniciar').style.display     = '';
+
+    if (window.innerWidth < 960)
+        document.getElementById('panel-selection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateLaundry() {
+    _recalcPanel();
+}
+
+// ── Galería carrusel ──────────────────────────────────────────────
+const _galData = @Html.Raw(galJson);
+let _galSeat  = 0;
+let _galSlide = 0;
+const _COP = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
+
+// Escenas detectadas a partir de amenidades del asiento
+const _SCENES = [
+    { key: /cocina/i,                            label: 'Cocina' },
+    { key: /dormitorio|habitaci/i,               label: 'Dormitorio' },
+    { key: /ba[ñn]o/i,                           label: 'Baño' },
+    { key: /balc[oó]n|terraza|jard[ií]n|hamaca/i,label: 'Exterior / Terraza' },
+    { key: /sala/i,                              label: 'Sala de estar' },
+    { key: /jacuzzi/i,                           label: 'Jacuzzi' },
+    { key: /piscina/i,                           label: 'Piscina' },
+    { key: /zona bbq|bbq/i,                      label: 'Zona BBQ' },
+];
+const _GAL_VARIANTS = ['gal-g1','gal-g2','gal-g3','gal-g4','gal-g5','gal-g6'];
+
+function _slidesFor(d) {
+    const accClass = d.gradClass.split(' ')[1] || '';
+    const slides = [{ label: 'Vista general', gradClass: d.gradClass }];
+    const amenStr = (d.amenities || []).join(',');
+    let vi = 1;
+    _SCENES.forEach(s => {
+        if (s.key.test(amenStr)) {
+            slides.push({ label: s.label, gradClass: `${_GAL_VARIANTS[vi % _GAL_VARIANTS.length]} ${accClass}` });
+            vi++;
+        }
+    });
+    return slides;
+}
+
+function openGalModal(seatIdx) {
+    _galSeat  = seatIdx;
+    _galSlide = 0;
+    const ov = document.getElementById('gal-overlay');
+    if (ov.parentElement !== document.body) document.body.appendChild(ov);
+    ov.style.display = 'flex';
+    _renderGal();
+}
+function closeGalModal(e) {
+    if (!e || e.target.id === 'gal-overlay')
+        document.getElementById('gal-overlay').style.display = 'none';
+}
+function galNav(dir) {
+    const slides = _slidesFor(_galData[_galSeat]);
+    _galSlide = (_galSlide + dir + slides.length) % slides.length;
+    _renderGal();
+}
+function _renderGal() {
+    const d      = _galData[_galSeat];
+    const slides = _slidesFor(d);
+    const n      = slides.length;
+    const s      = slides[_galSlide];
+
+    // Slide: gradiente + etiqueta de la vista actual
+    const slideEl = document.getElementById('gal-slide');
+    slideEl.className = `gal-slide ${s.gradClass}`;
+    slideEl.innerHTML = `<span class="gal-slide-label">${s.label}</span>`;
+
+    // Flechas: solo si hay más de 1 slide
+    document.getElementById('gal-prev').style.display = n > 1 ? '' : 'none';
+    document.getElementById('gal-next').style.display = n > 1 ? '' : 'none';
+
+    // Contador
+    document.getElementById('gal-counter').textContent = n > 1 ? `${_galSlide + 1} / ${n}` : '';
+
+    // Puntos
+    document.getElementById('gal-dots').innerHTML = n > 1
+        ? slides.map((_, i) =>
+            `<button class="gal-dot${i===_galSlide?' active':''}" onclick="galNav(${i - _galSlide})"></button>`
+          ).join('')
+        : '';
+
+    // Info del asiento (se mantiene fija al navegar slides)
+    const amenHtml = (d.amenities||[]).map(a=>`<span class="avail-amenity-pill">${a}</span>`).join('');
+    const priceHtml = d.price
+        ? `<div><div class="gal-desde">DESDE</div><div class="gal-price">${_COP.format(d.price)}</div><div class="gal-price-sub">por noche</div></div>`
+        : '';
+    document.getElementById('gal-modal-body').innerHTML = `
+        <div class="gal-modal-header">
+            <div>
+                <div class="gal-modal-name">${d.name}</div>
+                <div class="gal-modal-meta">
+                    <span class="gal-type-badge">${d.type}</span>
+                    <span class="gal-modal-cap">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                        </svg>
+                        Hasta ${d.capacity} personas
+                    </span>
+                </div>
+            </div>
+            ${priceHtml}
+        </div>
+        ${d.desc ? `<p class="gal-modal-desc">${d.desc}</p>` : ''}
+        ${amenHtml ? `<div class="gal-amenities-row">${amenHtml}</div>` : ''}
+    `;
+}
+
+// Estado inicial de los botones de personas
+_updatePersonsButtons();
+
+// Teclado: ← →
+document.addEventListener('keydown', e => {
+    if (document.getElementById('gal-overlay')?.style.display === 'flex') {
+        if (e.key === 'ArrowLeft')  galNav(-1);
+        if (e.key === 'ArrowRight') galNav(1);
+        if (e.key === 'Escape')     closeGalModal();
+    }
+});
+</script>
+}

@@ -1,0 +1,653 @@
+@page "{id:guid}"
+@model FODUN.Reservations.Api.Pages.Reservations.PayModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Pagar Reserva";
+    var cop = new CultureInfo("es-CO");
+    var r = Model.Reservation;
+    var isUpload = Model.Step == "upload";
+    var methodLabel = Model.SelectedMethod switch {
+        "PSE"     => "PSE · Débito bancario",
+        "Tarjeta" => "Tarjeta de crédito",
+        "Nomina"  => "Descuento de nómina",
+        _         => Model.SelectedMethod ?? ""
+    };
+}
+
+<!-- Encabezado -->
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:28px">
+    @if (isUpload)
+    {
+        <a asp-page="/Reservations/Pay" asp-route-id="@r?.Id" class="btn btn-ghost btn-sm" style="padding-left:0">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+            Atrás
+        </a>
+    }
+    else
+    {
+        <a asp-page="/Reservations/Detail" asp-route-id="@r?.Id" class="btn btn-ghost btn-sm" style="padding-left:0">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+            Atrás
+        </a>
+    }
+    <div>
+        <div class="eyebrow" style="margin-bottom:4px">Pago — @(isUpload ? "Paso 2 de 2" : "Paso 1 de 2")</div>
+        <h2 class="h-1" style="margin:0">@(isUpload ? "Adjuntar Comprobante" : "Método de Pago")</h2>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="fodun-alert fodun-alert-error" style="margin-bottom:20px">@Model.ErrorMessage</div>
+}
+
+@if (r is not null)
+{
+    <div class="pay-layout">
+
+        <!-- Columna principal -->
+        <div>
+
+            @if (!isUpload)
+            {
+                <!-- PASO 1: Método de pago -->
+                <form method="post" asp-page-handler="Pay" asp-route-id="@r.Id">
+
+                    <!-- Stepper -->
+                    <div class="pay-stepper">
+                        <div class="pay-step active">
+                            <div class="pay-step-num">1</div>
+                            <span>Método de pago</span>
+                        </div>
+                        <div class="pay-step-line"></div>
+                        <div class="pay-step">
+                            <div class="pay-step-num">2</div>
+                            <span>Comprobante</span>
+                        </div>
+                    </div>
+
+                    <div class="pay-card">
+                        <div class="pay-section-label">Selecciona cómo quieres pagar</div>
+
+                        <div class="pay-methods">
+                            <label class="pay-method-option">
+                                <input type="radio" name="PaymentMethod" value="PSE" class="pay-radio" onchange="onMethodChange(this)" checked />
+                                <div class="pay-method-left">
+                                    <div class="pay-method-icon pse-icon">
+                                        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+                                            <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                                        </svg>
+                                    </div>
+                                    <div class="pay-method-info">
+                                        <div class="pay-method-name">PSE</div>
+                                        <div class="pay-method-sub">Débito desde cuenta bancaria</div>
+                                    </div>
+                                </div>
+                                <div class="pay-check-ring"><div class="pay-check-dot"></div></div>
+                            </label>
+
+                            <label class="pay-method-option">
+                                <input type="radio" name="PaymentMethod" value="Tarjeta" class="pay-radio" onchange="onMethodChange(this)" />
+                                <div class="pay-method-left">
+                                    <div class="pay-method-icon card-icon">
+                                        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+                                            <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>
+                                        </svg>
+                                    </div>
+                                    <div class="pay-method-info">
+                                        <div class="pay-method-name">Tarjeta de crédito</div>
+                                        <div class="pay-method-sub">Visa · Mastercard · AmEx</div>
+                                    </div>
+                                </div>
+                                <div class="pay-check-ring"><div class="pay-check-dot"></div></div>
+                            </label>
+
+                            <label class="pay-method-option">
+                                <input type="radio" name="PaymentMethod" value="Nomina" class="pay-radio" onchange="onMethodChange(this)" />
+                                <div class="pay-method-left">
+                                    <div class="pay-method-icon nom-icon">
+                                        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                            <polyline points="14 2 14 8 20 8"/>
+                                            <line x1="16" y1="13" x2="8" y2="13"/>
+                                            <line x1="16" y1="17" x2="8" y2="17"/>
+                                        </svg>
+                                    </div>
+                                    <div class="pay-method-info">
+                                        <div class="pay-method-name">Descuento de nómina</div>
+                                        <div class="pay-method-sub">Hasta 3 cuotas sin interés</div>
+                                    </div>
+                                </div>
+                                <div class="pay-check-ring"><div class="pay-check-dot"></div></div>
+                            </label>
+                        </div>
+
+                        <!-- Banco -->
+                        <div id="bank-section" class="pay-bank-section">
+                            <label class="pay-field-label">Entidad bancaria</label>
+                            <div class="pay-select-wrap">
+                                <svg class="pay-select-icon" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                                </svg>
+                                <select name="Bank" class="pay-select">
+                                    <option>Bancolombia</option>
+                                    <option>Banco de Bogotá</option>
+                                    <option>Davivienda</option>
+                                    <option>BBVA</option>
+                                    <option>Nequi</option>
+                                    <option>Banco Popular</option>
+                                    <option>Scotiabank Colpatria</option>
+                                </select>
+                                <svg class="pay-select-arrow" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="m6 9 6 6 6-6"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Divisor -->
+                        <div class="pay-divider"></div>
+
+                        <!-- Seguridad -->
+                        <div class="pay-security">
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                            <span>Transacción segura · Tu información está encriptada</span>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="pay-actions">
+                            <a asp-page="/Reservations/Detail" asp-route-id="@r.Id" class="pay-btn-back">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                                Atrás
+                            </a>
+                            <button type="submit" class="pay-btn-primary">
+                                Continuar al pago
+                                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                    <path d="M5 12h14M13 6l6 6-6 6"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                </form>
+            }
+            else
+            {
+                <!-- PASO 2: Subir comprobante -->
+                <form method="post" asp-page-handler="Upload" asp-route-id="@r.Id" enctype="multipart/form-data">
+                    <input type="hidden" name="SelectedMethod" value="@Model.SelectedMethod" />
+                    <input type="hidden" name="SelectedBank"   value="@Model.SelectedBank" />
+
+                    <!-- Stepper -->
+                    <div class="pay-stepper">
+                        <div class="pay-step done">
+                            <div class="pay-step-num">
+                                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                            </div>
+                            <span>Método de pago</span>
+                        </div>
+                        <div class="pay-step-line done"></div>
+                        <div class="pay-step active">
+                            <div class="pay-step-num">2</div>
+                            <span>Comprobante</span>
+                        </div>
+                    </div>
+
+                    <div class="pay-card">
+
+                        <!-- Método seleccionado (resumen) -->
+                        <div class="pay-method-summary">
+                            <div class="pay-method-summary-icon">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                                </svg>
+                            </div>
+                            <div class="pay-method-summary-text">
+                                <div class="pay-method-summary-name">@methodLabel</div>
+                                @if (!string.IsNullOrEmpty(Model.SelectedBank) && Model.SelectedMethod == "PSE")
+                                {
+                                    <div class="pay-method-summary-bank">@Model.SelectedBank</div>
+                                }
+                            </div>
+                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" style="color:var(--accent);flex-shrink:0">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>
+                            </svg>
+                        </div>
+
+                        <div class="pay-section-label" style="margin-top:24px">Adjunta tu comprobante de pago</div>
+                        <p style="font-size:12px;color:var(--ink-4);margin:0 0 16px">
+                            El equipo revisará el pago y confirmará tu reserva en las próximas horas hábiles.
+                        </p>
+
+                        <!-- Zona upload -->
+                        <label class="pay-upload-zone" id="upload-zone">
+                            <input type="file" name="receipt" id="receipt-input" accept=".jpg,.jpeg,.png,.pdf"
+                                   style="display:none" onchange="onFileChange(this)" />
+                            <div id="upload-placeholder">
+                                <div class="pay-upload-icon">
+                                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                </div>
+                                <div class="pay-upload-title">Haz clic para seleccionar el archivo</div>
+                                <div class="pay-upload-hint">JPG, PNG o PDF · máx. 5 MB</div>
+                            </div>
+                            <div id="upload-preview" style="display:none;text-align:center">
+                                <div class="pay-upload-icon" style="background:color-mix(in srgb,var(--accent) 10%,#fff);border-color:var(--accent)">
+                                    <svg width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="1.6" viewBox="0 0 24 24">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                        <polyline points="14 2 14 8 20 8"/>
+                                    </svg>
+                                </div>
+                                <div id="file-name" class="pay-upload-title" style="color:var(--accent)"></div>
+                                <div class="pay-upload-hint">Clic para cambiar</div>
+                            </div>
+                        </label>
+
+                        <!-- Divisor -->
+                        <div class="pay-divider"></div>
+
+                        <!-- Seguridad -->
+                        <div class="pay-security">
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                            <span>Transacción segura · Tu información está encriptada</span>
+                        </div>
+
+                        <!-- Botones -->
+                        <div class="pay-actions">
+                            <a asp-page="/Reservations/Pay" asp-route-id="@r.Id" class="pay-btn-back">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                                Atrás
+                            </a>
+                            <button type="submit" class="pay-btn-primary">
+                                Finalizar reserva
+                                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                    <path d="m5 12 4.5 4.5L19 7"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            }
+        </div>
+
+        <!-- Columna resumen -->
+        <div class="create-summary-sticky">
+            <div class="summary-card">
+                <div class="summary-card-title">Resumen</div>
+                <div class="divider"></div>
+                <div class="summary-row">
+                    <span class="label">Lugar</span>
+                    <span style="font-size:12px;text-align:right;max-width:130px;line-height:1.4">@r.PlaceName</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Check-in</span>
+                    <span>@r.CheckInDate.ToString("dd MMM yyyy", new CultureInfo("es-CO"))</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Check-out</span>
+                    <span>@r.CheckOutDate.ToString("dd MMM yyyy", new CultureInfo("es-CO"))</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Noches</span>
+                    <span>@(r.CheckOutDate.DayNumber - r.CheckInDate.DayNumber)</span>
+                </div>
+                <div class="summary-row">
+                    <span class="label">Personas</span>
+                    <span>@r.TotalPersons</span>
+                </div>
+                @if (r.LaundryService)
+                {
+                    <div class="summary-row">
+                        <span class="label">Lavandería</span>
+                        <span>@r.LaundryServiceCost.ToString("C0", cop)</span>
+                    </div>
+                }
+                <div class="divider" style="margin:14px 0"></div>
+                <div class="summary-row" style="font-size:13px;font-weight:700">
+                    <span>Total</span>
+                    <span style="color:var(--accent);font-size:18px">@r.TotalCost.ToString("C0", cop)</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+}
+
+@section Scripts {
+<style>
+/* Layout */
+.pay-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 24px;
+    align-items: start;
+}
+@@media (max-width: 860px) { .pay-layout { grid-template-columns: 1fr; } }
+
+/* Stepper */
+.pay-stepper {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 20px;
+}
+.pay-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-4);
+}
+.pay-step.active { color: var(--accent); }
+.pay-step.done   { color: var(--ink-3); }
+.pay-step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    background: var(--bg-card);
+    color: var(--ink-4);
+    flex-shrink: 0;
+}
+.pay-step.active .pay-step-num {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+.pay-step.done .pay-step-num {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+.pay-step-line {
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+    margin: 0 12px;
+    max-width: 60px;
+}
+.pay-step-line.done { background: var(--accent); }
+
+/* Card principal */
+.pay-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 28px 28px 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+}
+
+.pay-section-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+    margin-bottom: 14px;
+}
+
+/* Métodos */
+.pay-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.pay-method-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .18s;
+    background: var(--bg-card);
+    user-select: none;
+}
+.pay-method-option:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    background: var(--accent-soft);
+}
+.pay-method-option:has(.pay-radio:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.pay-radio { display: none; }
+
+.pay-method-left { display: flex; align-items: center; gap: 12px; flex: 1; }
+
+.pay-method-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all .18s;
+}
+.pse-icon  { background: #E8F0FE; color: #1967D2; }
+.card-icon { background: #FFF0F3; color: #C62828; }
+.nom-icon  { background: #E8F5E9; color: #2E7D32; }
+
+.pay-method-option:has(.pay-radio:checked) .pay-method-icon {
+    filter: none;
+}
+.pay-method-option:has(.pay-radio:checked) .pse-icon  { background: #D3E3FD; }
+.pay-method-option:has(.pay-radio:checked) .card-icon { background: #FDDCDC; }
+.pay-method-option:has(.pay-radio:checked) .nom-icon  { background: #C8E6C9; }
+
+.pay-method-info { display: flex; flex-direction: column; gap: 2px; }
+.pay-method-name { font-size: 14px; font-weight: 700; color: var(--ink-1); }
+.pay-method-sub  { font-size: 11px; color: var(--ink-4); }
+
+/* Radio ring */
+.pay-check-ring {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all .18s;
+}
+.pay-method-option:has(.pay-radio:checked) .pay-check-ring {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+.pay-check-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background .18s;
+}
+.pay-method-option:has(.pay-radio:checked) .pay-check-dot {
+    background: #fff;
+}
+
+/* Banco select */
+.pay-bank-section { margin-bottom: 4px; }
+.pay-field-label {
+    display: block;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .06em; color: var(--ink-4);
+    margin-bottom: 8px;
+}
+.pay-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.pay-select-icon {
+    position: absolute; left: 13px;
+    color: var(--ink-3); pointer-events: none;
+}
+.pay-select-arrow {
+    position: absolute; right: 13px;
+    color: var(--ink-3); pointer-events: none;
+}
+.pay-select {
+    width: 100%;
+    padding: 11px 40px 11px 38px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg-elev);
+    font-size: 14px; font-weight: 500;
+    color: var(--ink-1);
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+}
+.pay-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Divisor */
+.pay-divider {
+    height: 1px;
+    background: var(--line);
+    margin: 20px 0;
+}
+
+/* Seguridad */
+.pay-security {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--ink-4);
+}
+.pay-security svg { flex-shrink: 0; }
+
+/* Acciones */
+.pay-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    gap: 12px;
+}
+.pay-btn-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 600;
+    color: var(--ink-3);
+    text-decoration: none;
+    padding: 10px 0;
+    transition: color .15s;
+}
+.pay-btn-back:hover { color: var(--ink-1); }
+.pay-btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px; font-weight: 700;
+    padding: 12px 22px;
+    border-radius: 10px;
+    border: none; cursor: pointer;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+    transition: background .15s, box-shadow .15s, transform .1s;
+}
+.pay-btn-primary:hover {
+    background: var(--accent-2);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
+    transform: translateY(-1px);
+}
+.pay-btn-primary:active { transform: translateY(0); }
+
+/* Método seleccionado (paso 2) */
+.pay-method-summary {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-elev);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+}
+.pay-method-summary-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.pay-method-summary-text { flex: 1; }
+.pay-method-summary-name { font-size: 13px; font-weight: 700; color: var(--ink-1); }
+.pay-method-summary-bank { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
+
+/* Upload zone */
+.pay-upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 170px;
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    padding: 28px 24px;
+    text-align: center;
+    transition: all .2s;
+    background: var(--bg-elev);
+}
+.pay-upload-zone:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+.pay-upload-icon {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: var(--bg-card);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+    transition: all .2s;
+}
+.pay-upload-zone:hover .pay-upload-icon {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+.pay-upload-title {
+    font-size: 13px; font-weight: 700;
+    color: var(--ink-2);
+    margin-bottom: 4px;
+}
+.pay-upload-hint { font-size: 11px; color: var(--ink-4); }
+</style>
+
+<script>
+function onMethodChange(radio) {
+    const bank = document.getElementById('bank-section');
+    if (bank) bank.style.display = radio.value === 'PSE' ? 'block' : 'none';
+}
+
+function onFileChange(input) {
+    const placeholder = document.getElementById('upload-placeholder');
+    const preview     = document.getElementById('upload-preview');
+    const nameEl      = document.getElementById('file-name');
+    if (input.files && input.files[0]) {
+        placeholder.style.display = 'none';
+        preview.style.display     = 'flex';
+        preview.style.flexDirection = 'column';
+        preview.style.alignItems = 'center';
+        nameEl.textContent = input.files[0].name;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const checked = document.querySelector('.pay-radio:checked');
+    if (checked) onMethodChange(checked);
+});
+</script>
+}

@@ -1,16 +1,19 @@
-namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
-
+using FODUN.Reservations.Domain.Aggregates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Domain.Entities;
 
-public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
+namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
+
+public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
 {
     public void Configure(EntityTypeBuilder<AuditLog> builder)
     {
-        builder.HasKey(x => x.Id);
-        
-        builder.Property(x => x.Action).HasMaxLength(100).IsRequired();
-        builder.Property(x => x.EntityType).HasMaxLength(100).IsRequired();
+        builder.ToTable("AuditLogs");
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).UseIdentityColumn();
+        builder.Property(a => a.Action).HasMaxLength(255).IsRequired();
+        builder.Property(a => a.EntityType).HasMaxLength(100);
+        builder.Property(a => a.IpAddress).HasMaxLength(45);
+        builder.Property(a => a.Timestamp).HasDefaultValueSql("GETUTCDATE()");
     }
 }

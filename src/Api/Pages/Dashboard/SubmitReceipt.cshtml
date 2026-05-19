@@ -1,0 +1,79 @@
+@page "{id:guid}"
+@model FODUN.Reservations.Api.Pages.Dashboard.SubmitReceiptModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Enviar Comprobante";
+    var cop = new CultureInfo("es-CO");
+    var r = Model.Reservation;
+}
+
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
+    <a asp-page="./Index" class="btn btn-ghost btn-sm" style="padding-left:0">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 12H5M11 18l-6-6 6-6"/>
+        </svg>
+        Mis reservas
+    </a>
+    <div>
+        <div class="eyebrow" style="margin-bottom:4px">Pago</div>
+        <h2 class="h-1" style="margin:0">Enviar Comprobante de Pago</h2>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="fodun-alert fodun-alert-error" style="margin-bottom:20px">@Model.ErrorMessage</div>
+}
+
+@if (r is not null)
+{
+    <div style="max-width:560px">
+        <div class="detail-card">
+            <div class="detail-card-header">Resumen de la reserva</div>
+            <div class="detail-card-body">
+                <div class="detail-row"><dt>Lugar</dt><dd>@r.PlaceName</dd></div>
+                <div class="detail-row">
+                    <dt>Fechas</dt>
+                    <dd>@r.CheckInDate.ToString("dd/MM/yyyy") → @r.CheckOutDate.ToString("dd/MM/yyyy")</dd>
+                </div>
+                <div class="detail-row"><dt>Personas</dt><dd>@r.TotalPersons</dd></div>
+                <div class="detail-row">
+                    <dt>Total a pagar</dt>
+                    <dd><strong style="font-size:16px">@r.TotalCost.ToString("C0", cop)</strong></dd>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-card">
+            <div class="detail-card-header">Información de pago</div>
+            <div class="detail-card-body">
+                <div style="background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-md);padding:16px;margin-bottom:20px">
+                    <div style="font-size:11px;font-weight:700;color:var(--ink-4);letter-spacing:.06em;margin-bottom:10px">DATOS BANCARIOS</div>
+                    <div class="detail-row"><dt>Banco</dt><dd>Bancolombia</dd></div>
+                    <div class="detail-row"><dt>Tipo de cuenta</dt><dd>Ahorros</dd></div>
+                    <div class="detail-row"><dt>No. de cuenta</dt><dd><strong>123-456789-00</strong></dd></div>
+                    <div class="detail-row"><dt>Titular</dt><dd>FODUN</dd></div>
+                    <div class="detail-row"><dt>Valor exacto</dt><dd><strong>@r.TotalCost.ToString("C0", cop)</strong></dd></div>
+                </div>
+
+                <p style="font-size:13px;color:var(--ink-3);margin-bottom:20px">
+                    Una vez realizada la transferencia, confirma tu pago haciendo clic en el botón de abajo.
+                    El equipo validará tu reserva en las próximas horas.
+                </p>
+
+                <form method="post" asp-route-id="@r.Id">
+                    <button type="submit" class="btn btn-block btn-lg">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="m5 12 4.5 4.5L19 7"/>
+                        </svg>
+                        Ya realicé el pago
+                    </button>
+                </form>
+
+                <a asp-page="./Index" class="btn btn-ghost btn-block" style="margin-top:10px;text-align:center">
+                    Cancelar
+                </a>
+            </div>
+        </div>
+    </div>
+}

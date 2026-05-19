@@ -1,24 +1,33 @@
-namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
-
+using FODUN.Reservations.Domain.Aggregates.Accommodation;
+using FODUN.Reservations.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Domain.Entities;
 
-public class AccommodationConfiguration : IEntityTypeConfiguration<Accommodation>
+namespace FODUN.Reservations.Infrastructure.Persistence.Configurations;
+
+public sealed class AccommodationConfiguration : IEntityTypeConfiguration<Accommodation>
 {
     public void Configure(EntityTypeBuilder<Accommodation> builder)
     {
-        builder.HasKey(x => x.Id);
-        
-        builder.HasIndex(x => x.Code).IsUnique();
-        
-        builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
-        builder.Property(x => x.Name).HasMaxLength(255).IsRequired();
-        builder.Property(x => x.City).HasMaxLength(100).IsRequired();
-        
-        builder.HasMany(x => x.Seats)
-            .WithOne(x => x.Accommodation)
-            .HasForeignKey(x => x.AccommodationId)
+        builder.ToTable("Accommodations");
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).HasDefaultValueSql("NEWID()");
+        builder.Property(a => a.Code).HasMaxLength(50).IsRequired();
+        builder.HasIndex(a => a.Code).IsUnique();
+
+        builder.Property(a => a.Name).HasMaxLength(255).IsRequired();
+        builder.Property(a => a.City).HasMaxLength(100).IsRequired();
+        builder.Property(a => a.Type)
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        builder.Property(a => a.IsActive).HasDefaultValue(true);
+        builder.Property(a => a.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+
+        builder.HasMany(a => a.Seats)
+            .WithOne()
+            .HasForeignKey(s => s.AccommodationId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

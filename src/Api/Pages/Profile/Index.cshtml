@@ -1,0 +1,156 @@
+@page
+@model FODUN.Reservations.Api.Pages.Profile.IndexModel
+@{
+    ViewData["Title"] = "Mi Perfil";
+}
+
+<h2 class="fodun-section-title">Mi Perfil</h2>
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="fodun-alert fodun-alert-success" style="margin-bottom:20px">@ok</div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="fodun-alert fodun-alert-error" style="margin-bottom:20px">@err</div>
+}
+
+<div style="max-width:680px">
+
+    <!-- Info card (read-only) -->
+    <div class="fodun-card" style="margin-bottom:20px">
+        <div class="fodun-card-header">Información de la cuenta</div>
+        <div class="fodun-card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 32px">
+
+                <div>
+                    <div class="profile-label">Correo electrónico</div>
+                    <div class="profile-value">@Model.Email</div>
+                    @if (Model.IsEmailConfirmed)
+                    {
+                        <span class="profile-badge profile-badge-ok">
+                            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                            Verificado
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="profile-badge profile-badge-warn">Sin verificar</span>
+                    }
+                </div>
+
+                <div>
+                    <div class="profile-label">Número de documento</div>
+                    <div class="profile-value">@Model.DocumentNumber</div>
+                </div>
+
+                <div>
+                    <div class="profile-label">Miembro desde</div>
+                    <div class="profile-value">@Model.MemberSince</div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit card -->
+    <div class="fodun-card">
+        <div class="fodun-card-header">Editar datos personales</div>
+        <div class="fodun-card-body">
+            <form method="post">
+                @Html.AntiForgeryToken()
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 24px;margin-bottom:24px">
+
+                    <div style="grid-column:1/-1">
+                        <label class="fodun-label">Nombre completo <span style="color:var(--accent)">*</span></label>
+                        <input asp-for="FullName" class="fodun-input @(ViewData.ModelState["FullName"]?.Errors.Count > 0 ? "input-error" : "")"
+                               placeholder="Tu nombre completo" maxlength="120" />
+                        <span asp-validation-for="FullName" class="fodun-field-error"></span>
+                    </div>
+
+                    <div>
+                        <label class="fodun-label">Teléfono</label>
+                        <input asp-for="PhoneNumber" class="fodun-input"
+                               placeholder="Ej: +57 300 000 0000" maxlength="30" />
+                    </div>
+
+                </div>
+
+                <div style="display:flex;gap:12px;align-items:center">
+                    <button type="submit" class="btn-fodun">Guardar cambios</button>
+                    <span style="font-size:11px;color:#aaa">Los campos marcados con * son obligatorios</span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<style>
+.fodun-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.fodun-card-header {
+    padding: 14px 22px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-1);
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-base);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.fodun-card-body { padding: 22px; }
+.profile-label {
+    font-size: 10px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.profile-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-1);
+    margin-bottom: 4px;
+}
+.profile-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+.profile-badge-ok   { background: #d4edda; color: #155724; }
+.profile-badge-warn { background: #fff3cd; color: #856404; }
+.fodun-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+}
+.fodun-input {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-base);
+    color: var(--ink-1);
+    transition: border-color .15s;
+    font-family: var(--font-sans);
+}
+.fodun-input:focus { outline: none; border-color: var(--accent); }
+.input-error { border-color: #dc3545 !important; }
+.fodun-field-error { font-size: 11px; color: #dc3545; margin-top: 4px; display: block; }
+</style>
+}
