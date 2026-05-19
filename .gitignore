@@ -59,8 +59,7 @@ appsettings.Production.json
 *.db-shm
 *.db-wal
 
-# Carpeta de documentación interna / generada por herramientas
-Readmes/
+# Análisis interno generado por herramientas
 ANALISIS_COMPLETO.md
 
 # Scripts temporales de desarrollo
